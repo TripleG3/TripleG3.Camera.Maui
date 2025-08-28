@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:lib="clr-namespace:TripleG3.Camera.Maui;assembly=TripleG3.Camera.Maui"
+             x:Class="TripleG3.Camera.Maui.ManualTestApp.CameraPage"
+             Title="Camera Preview">
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*">
+        <HorizontalStackLayout Spacing="12" Padding="12">
+            <Picker x:Name="CameraPicker" Title="Select Camera" WidthRequest="250"/>
+            <Button Text="Start" Clicked="OnStartClicked"/>
+            <Button Text="Stop" Clicked="OnStopClicked"/>
+        </HorizontalStackLayout>
+        <ContentView x:Name="PreviewHost" Grid.Row="1" BackgroundColor="Black"/>        
+    </Grid>
+</ContentPage>

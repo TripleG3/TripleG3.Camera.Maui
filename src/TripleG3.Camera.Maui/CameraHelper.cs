@@ -51,7 +51,7 @@ public sealed class CameraHelper : IDrawable, IAsyncDisposable
         {
             _latestFrame = frame; // store reference (immutable payload)
         }
-        MainThread.BeginInvokeOnMainThread(() => _graphicsView.Invalidate());
+        MainThread.BeginInvokeOnMainThread(_graphicsView.Invalidate);
         return ValueTask.CompletedTask;
     }
 
