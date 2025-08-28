@@ -2,7 +2,7 @@ namespace TripleG3.Camera.Maui.ManualTestApp;
 
 public partial class CameraPage : ContentPage
 {
-    private CameraManager _manager;
+    private readonly CameraManager _manager;
 
     public CameraPage()
     {

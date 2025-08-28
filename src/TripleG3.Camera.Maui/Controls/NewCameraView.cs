@@ -1,6 +1,6 @@
 namespace TripleG3.Camera.Maui.Controls;
 
-public sealed class NewCameraView : View, IAsyncDisposable
+public sealed partial class NewCameraView : View, IAsyncDisposable
 {
     public static readonly BindableProperty CameraIdProperty =
         BindableProperty.Create(nameof(CameraId), typeof(string), typeof(NewCameraView), null, propertyChanged: OnCameraIdChanged);

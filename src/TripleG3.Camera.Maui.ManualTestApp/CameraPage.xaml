@@ -14,7 +14,7 @@
             </HorizontalStackLayout>
             <!--<Label FontSize="12" Text="Modes include new GPU view below (NewCameraView)." />-->
         </VerticalStackLayout>
-        <cam:NewCameraView x:Name="GpuCameraView" Grid.Row="1" />
+        <cam:NewCameraView x:Name="GpuCameraView" Grid.Row="1" WidthRequest="500" HeightRequest="500"/>
         <!--<ContentView x:Name="PreviewHost" Grid.Row="2" BackgroundColor="Black" />-->
     </Grid>
 </ContentPage>

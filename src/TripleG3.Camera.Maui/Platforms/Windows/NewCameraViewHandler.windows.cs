@@ -11,7 +11,7 @@ using TripleG3.Camera.Maui.Controls;
 
 namespace TripleG3.Camera.Maui;
 
-public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, FrameworkElement>, INewCameraViewHandler
+public sealed partial class NewCameraViewHandler : ViewHandler<NewCameraView, CanvasControl>, INewCameraViewHandler
 {
     public static IPropertyMapper<NewCameraView, NewCameraViewHandler> Mapper = new PropertyMapper<NewCameraView, NewCameraViewHandler>(ViewHandler.ViewMapper)
     {
@@ -33,12 +33,13 @@ public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, FrameworkE
     string? _cameraId;
     bool _started;
 
-    protected override FrameworkElement CreatePlatformView()
+    protected override CanvasControl CreatePlatformView()
     {
         _canvas = new CanvasControl();
         //_canvas.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(new Windows.UI.Color() { A = 255, R = 150, G = 150, B = 150 });
-        _canvas.Draw += Canvas_Draw;
         VirtualView.HandlerImpl = this;
+        _canvas.Invalidate();
+        _canvas.Draw += Canvas_Draw;
         return _canvas;
     }
 
@@ -119,7 +120,7 @@ public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, FrameworkE
         {
             _latestSurface = surface;
         }
-        _canvas?.Invalidate();
+        MainThread.InvokeOnMainThreadAsync(() => _canvas?.Invalidate());
     }
 
     void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
@@ -158,7 +159,7 @@ public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, FrameworkE
         lock (_surfaceLock) _latestSurface = null;
     }
 
-    protected override void DisconnectHandler(FrameworkElement platformView)
+    protected override void DisconnectHandler(CanvasControl platformView)
     {
         _ = CleanupAsync();
         if (_canvas != null)
