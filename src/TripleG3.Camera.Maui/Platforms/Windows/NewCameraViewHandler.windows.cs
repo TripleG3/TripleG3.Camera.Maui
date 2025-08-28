@@ -36,6 +36,7 @@ public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, FrameworkE
     protected override FrameworkElement CreatePlatformView()
     {
         _canvas = new CanvasControl();
+        //_canvas.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(new Windows.UI.Color() { A = 255, R = 150, G = 150, B = 150 });
         _canvas.Draw += Canvas_Draw;
         VirtualView.HandlerImpl = this;
         return _canvas;
@@ -61,6 +62,7 @@ public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, FrameworkE
 
     public async Task StopAsync()
     {
+        if (!_started) return;
         _started = false;
         await CleanupAsync();
         _canvas?.Invalidate();

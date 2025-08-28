@@ -12,7 +12,7 @@ public sealed class WindowsCameraManager : CameraManager
 {
     MediaCapture? _mediaCapture;
     MediaFrameReader? _frameReader;
-    byte[] _buffer = Array.Empty<byte>();
+    byte[] _buffer = [];
     VideoMediaFrameFormat? _activeFormat;
 
     public Action<string>? Logger { get; set; }
