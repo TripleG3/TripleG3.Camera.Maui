@@ -29,7 +29,9 @@ internal sealed class AndroidCameraManager : CameraManager
         foreach (var id in _system.GetCameraIdList())
         {
             var chars = _system.GetCameraCharacteristics(id);
-            var facing = (int?)chars.Get(CameraCharacteristics.LensFacing);
+            // Safely extract lens facing avoiding unboxing null
+            var lensFacingObj = chars.Get(CameraCharacteristics.LensFacing);
+            int? facing = lensFacingObj is Java.Lang.Integer jint2 ? jint2.IntValue() : null;
             bool ext = facing == (int)LensFacing.External; // heuristic
             list.Add(new CameraInfo(id, $"Camera {id}", facing switch
             {
@@ -133,9 +135,18 @@ internal sealed class AndroidCameraManager : CameraManager
         _ = OnFrameAsync(frame);
     }
 
-    sealed class ImageListener(Action<ImageReader> cb) : Java.Lang.Object, ImageReader.IOnImageAvailableListener
+    sealed class ImageListener : Java.Lang.Object, ImageReader.IOnImageAvailableListener
     {
-        public void OnImageAvailable(ImageReader? reader) => cb(reader);
+        readonly Action<ImageReader> _cb;
+        public ImageListener(Action<ImageReader> cb)
+        {
+            _cb = cb ?? throw new ArgumentNullException(nameof(cb));
+        }
+        public void OnImageAvailable(ImageReader? reader)
+        {
+            if (reader is null) return;
+            _cb(reader);
+        }
     }
 
     sealed class StateCallback(AndroidCameraManager owner, TaskCompletionSource tcs) : CameraDevice.StateCallback
@@ -145,7 +156,19 @@ internal sealed class AndroidCameraManager : CameraManager
             owner._cameraDevice = camera;
             try
             {
-                var surfaces = new List<Surface> { owner._imageReader!.Surface };
+                var imageReader = owner._imageReader;
+                if (imageReader is null)
+                {
+                    tcs.TrySetException(new InvalidOperationException("ImageReader not initialized"));
+                    return;
+                }
+                if (imageReader.Surface is not Surface validSurface)
+                {
+                    tcs.TrySetException(new InvalidOperationException("ImageReader surface not available"));
+                    return;
+                }
+                var surfaces = new List<Surface>();
+                surfaces.Add(validSurface);
                 camera.CreateCaptureSession(surfaces, new SessionCallback(owner, tcs), null);
             }
             catch (Exception ex)
@@ -170,9 +193,25 @@ internal sealed class AndroidCameraManager : CameraManager
             owner._session = session;
             try
             {
-                var builder = owner._cameraDevice!.CreateCaptureRequest(CameraTemplate.Preview);
-                builder.AddTarget(owner._imageReader!.Surface);
-                builder.Set(CaptureRequest.ControlMode, (int)ControlMode.Auto);
+                var cameraDevice = owner._cameraDevice;
+                var imageReader = owner._imageReader;
+                if (cameraDevice is null || imageReader is null)
+                {
+                    tcs.TrySetException(new InvalidOperationException("Camera not fully initialized"));
+                    return;
+                }
+                if (imageReader.Surface is not Surface validSurface)
+                {
+                    tcs.TrySetException(new InvalidOperationException("ImageReader surface not available"));
+                    return;
+                }
+                var builder = cameraDevice.CreateCaptureRequest(CameraTemplate.Preview);
+                builder.AddTarget(validSurface);
+                var controlModeKey = CaptureRequest.ControlMode; // could be null per annotations
+                if (controlModeKey is not null)
+                {
+                    builder.Set(controlModeKey, (int)ControlMode.Auto);
+                }
                 session.SetRepeatingRequest(builder.Build(), null, null);
                 tcs.TrySetResult();
             }
