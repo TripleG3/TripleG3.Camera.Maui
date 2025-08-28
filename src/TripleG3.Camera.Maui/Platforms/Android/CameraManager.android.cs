@@ -49,7 +49,7 @@ internal sealed class AndroidCameraManager : CameraManager
         await SyncLock.WaitAsync(cancellationToken);
         try
         {
-            if (SelectedCamera?.Id == cameraId) return;
+            if (SelectedCamera.Id == cameraId) return;
             var cams = await GetCamerasAsync(cancellationToken);
             var cam = cams.FirstOrDefault(c => c.Id == cameraId) ?? throw new ArgumentException("Camera not found", nameof(cameraId));
             if (IsStreaming)
@@ -64,7 +64,7 @@ internal sealed class AndroidCameraManager : CameraManager
     public override async ValueTask StartAsync(Func<CameraFrame, ValueTask> frameCallback, CancellationToken cancellationToken = default)
     {
         if (IsStreaming) return;
-        if (SelectedCamera is null) throw new InvalidOperationException("Select a camera first.");
+        if (SelectedCamera == CameraInfo.Empty) throw new InvalidOperationException("Select a camera first.");
         await SyncLock.WaitAsync(cancellationToken);
         try
         {
@@ -125,7 +125,7 @@ internal sealed class AndroidCameraManager : CameraManager
         }
         var frame = new CameraFrame
         {
-            CameraId = SelectedCamera!.Id,
+            CameraId = SelectedCamera.Id,
             TimestampUtcTicks = DateTime.UtcNow.Ticks,
             Width = image.Width,
             Height = image.Height,

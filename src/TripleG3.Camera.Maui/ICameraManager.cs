@@ -6,6 +6,7 @@ public interface ICameraManager
     ValueTask SelectCameraAsync(string cameraId, CancellationToken cancellationToken = default);
     ValueTask StartAsync(Func<CameraFrame, ValueTask> frameCallback, CancellationToken cancellationToken = default);
     ValueTask StopAsync(CancellationToken cancellationToken = default);
-    CameraInfo? SelectedCamera { get; }
+    // Never null. Use CameraInfo.Empty to represent 'no selection'.
+    CameraInfo SelectedCamera { get; }
     bool IsStreaming { get; }
 }

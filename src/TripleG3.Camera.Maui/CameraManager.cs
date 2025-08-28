@@ -5,7 +5,7 @@ namespace TripleG3.Camera.Maui;
 /// </summary>
 public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
 {
-    public CameraInfo? SelectedCamera { get; protected set; }
+    public CameraInfo SelectedCamera { get; protected set; } = CameraInfo.Empty;
     public bool IsStreaming { get; protected set; }
 
     protected Func<CameraFrame, ValueTask>? FrameCallback;

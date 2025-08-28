@@ -7,4 +7,3 @@ public sealed record CameraInfo(string Id, string Name, CameraFacing Facing, boo
 { 
     public static CameraInfo Empty { get; } = new CameraInfo(string.Empty, string.Empty, CameraFacing.Unknown, false);
 }
-

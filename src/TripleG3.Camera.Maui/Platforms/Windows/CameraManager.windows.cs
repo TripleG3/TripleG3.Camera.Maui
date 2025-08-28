@@ -30,7 +30,7 @@ internal sealed class WindowsCameraManager : CameraManager
         await SyncLock.WaitAsync(cancellationToken);
         try
         {
-            if (SelectedCamera?.Id == cameraId) return;
+            if (SelectedCamera.Id == cameraId) return;
             var cams = await GetCamerasAsync(cancellationToken);
             SelectedCamera = cams.FirstOrDefault(c => c.Id == cameraId) ?? throw new ArgumentException("Camera not found", nameof(cameraId));
             if (IsStreaming)
@@ -42,7 +42,7 @@ internal sealed class WindowsCameraManager : CameraManager
     public override async ValueTask StartAsync(Func<CameraFrame, ValueTask> frameCallback, CancellationToken cancellationToken = default)
     {
         if (IsStreaming) return;
-        if (SelectedCamera is null) throw new InvalidOperationException("Select a camera first.");
+        if (SelectedCamera == CameraInfo.Empty) throw new InvalidOperationException("Select a camera first.");
         await SyncLock.WaitAsync(cancellationToken);
         try
         {
@@ -102,7 +102,7 @@ internal sealed class WindowsCameraManager : CameraManager
         converted.CopyToBuffer(bytes.AsBuffer());
         var frameObj = new CameraFrame
         {
-            CameraId = SelectedCamera!.Id,
+            CameraId = SelectedCamera.Id,
             TimestampUtcTicks = DateTime.UtcNow.Ticks,
             Width = converted.PixelWidth,
             Height = converted.PixelHeight,
