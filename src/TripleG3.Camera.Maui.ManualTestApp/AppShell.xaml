@@ -6,13 +6,8 @@
     xmlns:local="clr-namespace:TripleG3.Camera.Maui.ManualTestApp"
     Title="TripleG3.Camera.Maui.ManualTestApp">
 
-    <TabBar>
-        <ShellContent
-            Title="Home"
-            ContentTemplate="{DataTemplate local:MainPage}" />
-        <ShellContent
-            Title="Camera"
-            ContentTemplate="{DataTemplate local:CameraPage}" />
-    </TabBar>
+    <ShellContent
+        Title="Camera"
+        ContentTemplate="{DataTemplate local:CameraPage}" />
 
 </Shell>

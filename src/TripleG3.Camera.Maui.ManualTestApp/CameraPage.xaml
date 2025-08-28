@@ -1,15 +1,20 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:lib="clr-namespace:TripleG3.Camera.Maui;assembly=TripleG3.Camera.Maui"
+             xmlns:cam="clr-namespace:TripleG3.Camera.Maui.Controls;assembly=TripleG3.Camera.Maui"
              x:Class="TripleG3.Camera.Maui.ManualTestApp.CameraPage"
              Title="Camera Preview">
-    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*">
-        <HorizontalStackLayout Spacing="12" Padding="12">
-            <Picker x:Name="CameraPicker" Title="Select Camera" WidthRequest="250"/>
-            <Button Text="Start" Clicked="OnStartClicked"/>
-            <Button Text="Stop" Clicked="OnStopClicked"/>
-        </HorizontalStackLayout>
-        <ContentView x:Name="PreviewHost" Grid.Row="1" BackgroundColor="Black"/>        
+    <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*">
+        <VerticalStackLayout Spacing="8" Padding="12" Grid.Row="0">
+            <HorizontalStackLayout Spacing="12">
+                <Picker x:Name="CameraPicker" Title="Select Camera" WidthRequest="220" />
+                <Picker x:Name="ModePicker" Title="Render Mode" WidthRequest="180" />
+                <Button Text="Start" Clicked="OnStartClicked" />
+                <Button Text="Stop" Clicked="OnStopClicked" />
+            </HorizontalStackLayout>
+            <Label FontSize="12" Text="Modes include new GPU view below (NewCameraView)." />
+        </VerticalStackLayout>
+        <cam:NewCameraView x:Name="GpuCameraView" Grid.Row="1" HeightRequest="200" />
+        <ContentView x:Name="PreviewHost" Grid.Row="2" BackgroundColor="Black" />
     </Grid>
 </ContentPage>

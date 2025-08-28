@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using TripleG3.Camera.Maui.Controls;
 
 namespace TripleG3.Camera.Maui.ManualTestApp
 {
@@ -13,6 +14,12 @@ namespace TripleG3.Camera.Maui.ManualTestApp
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+                })
+                .ConfigureMauiHandlers(h =>
+                {
+#if WINDOWS
+                    h.AddHandler<NewCameraView, NewCameraViewHandler>();
+#endif
                 });
 
 #if DEBUG

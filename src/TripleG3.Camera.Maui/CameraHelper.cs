@@ -17,6 +17,9 @@ public sealed class CameraHelper : IDrawable, IAsyncDisposable
     readonly object _frameLock = new();
     CameraFrame _latestFrame = CameraFrame.Empty; // frame reference replaced atomically under lock
 
+    // External observer hook
+    public Action<CameraFrame>? FrameObserved { get; set; }
+
     // Adjustable pixel skip to reduce draw cost (1 = full resolution, 2 = quarter, etc.)
     public int PixelStep { get; set; } = 2;
 
@@ -51,6 +54,7 @@ public sealed class CameraHelper : IDrawable, IAsyncDisposable
         {
             _latestFrame = frame; // store reference (immutable payload)
         }
+        FrameObserved?.Invoke(frame);
         MainThread.BeginInvokeOnMainThread(_graphicsView.Invalidate);
         return ValueTask.CompletedTask;
     }
@@ -61,12 +65,8 @@ public sealed class CameraHelper : IDrawable, IAsyncDisposable
         CameraFrame frame;
         lock (_frameLock)
             frame = _latestFrame;
-        if (frame == null) return;
-        if (frame.PixelFormat is not (CameraPixelFormat.Bgra32 or CameraPixelFormat.Rgba32))
-        {
-            // Unsupported format (e.g., Yuv420). Could add conversion here later.
-            return;
-        }
+        if (frame == CameraFrame.Empty) return;
+        if (frame.PixelFormat is not (CameraPixelFormat.Bgra32 or CameraPixelFormat.Rgba32)) return;
 
         var data = frame.Data;
         int w = frame.Width;
@@ -89,7 +89,6 @@ public sealed class CameraHelper : IDrawable, IAsyncDisposable
                 byte r = data[idx + (bgra ? 2 : 0)];
                 byte a = data[idx + 3];
                 canvas.FillColor = Color.FromRgba(r, g, b, a);
-                // Draw a rectangle representing this pixel (or block if skipping)
                 canvas.FillRectangle(dirtyRect.X + x * scaleX, dirtyRect.Y + y * scaleY, step * scaleX, step * scaleY);
             }
         }

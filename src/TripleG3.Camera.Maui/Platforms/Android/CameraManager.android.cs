@@ -29,7 +29,6 @@ internal sealed class AndroidCameraManager : CameraManager
         foreach (var id in _system.GetCameraIdList())
         {
             var chars = _system.GetCameraCharacteristics(id);
-            // Safely extract lens facing avoiding unboxing null
             var lensFacingObj = chars.Get(CameraCharacteristics.LensFacing);
             int? facing = lensFacingObj is Java.Lang.Integer jint2 ? jint2.IntValue() : null;
             bool ext = facing == (int)LensFacing.External; // heuristic
@@ -72,6 +71,7 @@ internal sealed class AndroidCameraManager : CameraManager
             FrameCallback = frameCallback;
             _streamCts = new();
             var tcs = new TaskCompletionSource();
+            // Use a modest default preview size; in production query supported sizes.
             _imageReader = ImageReader.NewInstance(1280, 720, ImageFormatType.Yuv420888, 2);
             _imageReader.SetOnImageAvailableListener(new ImageListener(OnImageAvailable), null);
 
@@ -110,27 +110,60 @@ internal sealed class AndroidCameraManager : CameraManager
         using var image = reader.AcquireLatestImage();
         if (image == null) return;
         var planes = image.GetPlanes();
-        if (planes == null || planes.Length == 0) return;
-        int size = 0;
-        foreach (var p in planes) size += p.Buffer?.Remaining() ?? 0;
-        var data = new byte[size];
-        int offset = 0;
-        foreach (var p in planes)
+        if (planes == null || planes.Length < 3) return;
+
+        var yPlane = planes[0];
+        var uPlane = planes[1];
+        var vPlane = planes[2];
+        var yBuf = yPlane.Buffer; var uBuf = uPlane.Buffer; var vBuf = vPlane.Buffer;
+        if (yBuf == null || uBuf == null || vBuf == null) return;
+
+        int width = image.Width;
+        int height = image.Height;
+        int yRowStride = yPlane.RowStride;
+        int yPixelStride = yPlane.PixelStride;
+        int uRowStride = uPlane.RowStride;
+        int uPixelStride = uPlane.PixelStride;
+        int vRowStride = vPlane.RowStride;
+        int vPixelStride = vPlane.PixelStride;
+
+        var rgba = new byte[4 * width * height];
+        // Convert YUV420 to BGRA32 (fast but not vectorized)
+        for (int y = 0; y < height; y++)
         {
-            var buf = p.Buffer;
-            if (buf == null) continue;
-            int len = buf.Remaining();
-            buf.Get(data, offset, len);
-            offset += len;
+            int yRow = y * yRowStride;
+            int uvRow = (y / 2) * uRowStride;
+            for (int x = 0; x < width; x++)
+            {
+                int yIndex = yRow + x * yPixelStride;
+                int uvIndex = uvRow + (x / 2) * uPixelStride;
+                int vIndex = (y / 2) * vRowStride + (x / 2) * vPixelStride;
+                int Y = (yBuf.Get(yIndex) & 0xFF); // Java.Nio access via Get(int)
+                int U = (uBuf.Get(uvIndex) & 0xFF) - 128;
+                int V = (vBuf.Get(vIndex) & 0xFF) - 128;
+                int C = Y - 16; if (C < 0) C = 0;
+                int R = (298 * C + 409 * V + 128) >> 8;
+                int G = (298 * C - 100 * U - 208 * V + 128) >> 8;
+                int B = (298 * C + 516 * U + 128) >> 8;
+                if (R < 0) R = 0; else if (R > 255) R = 255;
+                if (G < 0) G = 0; else if (G > 255) G = 255;
+                if (B < 0) B = 0; else if (B > 255) B = 255;
+                int idx = 4 * (y * width + x);
+                rgba[idx + 0] = (byte)B; // BGRA
+                rgba[idx + 1] = (byte)G;
+                rgba[idx + 2] = (byte)R;
+                rgba[idx + 3] = 255;
+            }
         }
+
         var frame = new CameraFrame
         {
             CameraId = SelectedCamera.Id,
             TimestampUtcTicks = DateTime.UtcNow.Ticks,
-            Width = image.Width,
-            Height = image.Height,
-            PixelFormat = CameraPixelFormat.Yuv420,
-            Data = data
+            Width = width,
+            Height = height,
+            PixelFormat = CameraPixelFormat.Bgra32,
+            Data = rgba
         };
         _ = OnFrameAsync(frame);
     }
@@ -138,14 +171,10 @@ internal sealed class AndroidCameraManager : CameraManager
     sealed class ImageListener : Java.Lang.Object, ImageReader.IOnImageAvailableListener
     {
         readonly Action<ImageReader> _cb;
-        public ImageListener(Action<ImageReader> cb)
-        {
-            _cb = cb ?? throw new ArgumentNullException(nameof(cb));
-        }
+        public ImageListener(Action<ImageReader> cb) => _cb = cb;
         public void OnImageAvailable(ImageReader? reader)
         {
-            if (reader is null) return;
-            _cb(reader);
+            if (reader is null) return; _cb(reader);
         }
     }
 
@@ -167,23 +196,13 @@ internal sealed class AndroidCameraManager : CameraManager
                     tcs.TrySetException(new InvalidOperationException("ImageReader surface not available"));
                     return;
                 }
-                var surfaces = new List<Surface>();
-                surfaces.Add(validSurface);
+                var surfaces = new List<Surface> { validSurface };
                 camera.CreateCaptureSession(surfaces, new SessionCallback(owner, tcs), null);
             }
-            catch (Exception ex)
-            {
-                tcs.TrySetException(ex);
-            }
+            catch (Exception ex) { tcs.TrySetException(ex); }
         }
-        public override void OnDisconnected(CameraDevice camera)
-        {
-            tcs.TrySetException(new System.IO.IOException("Camera disconnected"));
-        }
-        public override void OnError(CameraDevice camera, CameraError error)
-        {
-            tcs.TrySetException(new System.IO.IOException($"Camera error: {error}"));
-        }
+        public override void OnDisconnected(CameraDevice camera) => tcs.TrySetException(new IOException("Camera disconnected"));
+        public override void OnError(CameraDevice camera, CameraError error) => tcs.TrySetException(new IOException($"Camera error: {error}"));
     }
 
     sealed class SessionCallback(AndroidCameraManager owner, TaskCompletionSource tcs) : CameraCaptureSession.StateCallback
@@ -200,25 +219,22 @@ internal sealed class AndroidCameraManager : CameraManager
                     tcs.TrySetException(new InvalidOperationException("Camera not fully initialized"));
                     return;
                 }
-                if (imageReader.Surface is not Surface validSurface)
+                if (imageReader.Surface is not Surface surface)
                 {
                     tcs.TrySetException(new InvalidOperationException("ImageReader surface not available"));
                     return;
                 }
                 var builder = cameraDevice.CreateCaptureRequest(CameraTemplate.Preview);
-                builder.AddTarget(validSurface);
-                var controlModeKey = CaptureRequest.ControlMode; // could be null per annotations
+                builder.AddTarget(surface);
+                var controlModeKey = CaptureRequest.ControlMode;
                 if (controlModeKey is not null)
-                {
                     builder.Set(controlModeKey, (int)ControlMode.Auto);
-                }
                 session.SetRepeatingRequest(builder.Build(), null, null);
                 tcs.TrySetResult();
             }
             catch (Exception ex) { tcs.TrySetException(ex); }
         }
-        public override void OnConfigureFailed(CameraCaptureSession session)
-        { tcs.TrySetException(new System.IO.IOException("Configure failed")); }
+        public override void OnConfigureFailed(CameraCaptureSession session) => tcs.TrySetException(new IOException("Configure failed"));
     }
 }
 #endif

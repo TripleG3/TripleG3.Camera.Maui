@@ -18,6 +18,11 @@ public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
 
     protected virtual ValueTask OnFrameAsync(CameraFrame frame) => FrameCallback(frame);
 
+    public void SetFrameCallback(Func<CameraFrame, ValueTask> frameCallback)
+    {
+        FrameCallback = frameCallback;
+    }
+
     public virtual async ValueTask DisposeAsync()
     {
         try { await StopAsync(); } catch { /* ignore */ }
