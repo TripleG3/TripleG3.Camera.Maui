@@ -8,7 +8,7 @@ public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
     public CameraInfo SelectedCamera { get; protected set; } = CameraInfo.Empty;
     public bool IsStreaming { get; protected set; }
 
-    protected Func<CameraFrame, ValueTask>? FrameCallback;
+    protected Func<CameraFrame, ValueTask> FrameCallback = _ => ValueTask.CompletedTask;
     protected readonly SemaphoreSlim SyncLock = new(1,1);
 
     public abstract ValueTask<IReadOnlyList<CameraInfo>> GetCamerasAsync(CancellationToken cancellationToken = default);
@@ -16,7 +16,7 @@ public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
     public abstract ValueTask StartAsync(Func<CameraFrame, ValueTask> frameCallback, CancellationToken cancellationToken = default);
     public abstract ValueTask StopAsync(CancellationToken cancellationToken = default);
 
-    protected virtual ValueTask OnFrameAsync(CameraFrame frame) => FrameCallback is null ? ValueTask.CompletedTask : FrameCallback(frame);
+    protected virtual ValueTask OnFrameAsync(CameraFrame frame) => FrameCallback(frame);
 
     public virtual async ValueTask DisposeAsync()
     {
