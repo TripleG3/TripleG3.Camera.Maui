@@ -1,6 +1,6 @@
-namespace TripleG3.Camera.Maui.Controls;
+namespace TripleG3.Camera.Maui; // CHANGED from .Controls
 
-public sealed partial class NewCameraView : View, IAsyncDisposable
+public sealed class NewCameraView : View, IAsyncDisposable
 {
     public static readonly BindableProperty CameraIdProperty =
         BindableProperty.Create(nameof(CameraId), typeof(string), typeof(NewCameraView), null, propertyChanged: OnCameraIdChanged);
@@ -12,17 +12,13 @@ public sealed partial class NewCameraView : View, IAsyncDisposable
     }
 
     internal INewCameraViewHandler? HandlerImpl { get; set; }
-
     public bool IsRunning => HandlerImpl?.IsRunning == true;
 
-    static void OnCameraIdChanged(BindableObject bindable, object? oldValue, object? newValue)
-    {
-        var view = (NewCameraView)bindable;
-        view.HandlerImpl?.OnCameraIdChanged((string?)newValue);
-    }
+    static void OnCameraIdChanged(BindableObject bindable, object? oldValue, object? newValue) =>
+        ((NewCameraView)bindable).HandlerImpl?.OnCameraIdChanged((string?)newValue);
 
     public Task StartAsync() => HandlerImpl?.StartAsync() ?? Task.CompletedTask;
-    public Task StopAsync() => HandlerImpl?.StopAsync() ?? Task.CompletedTask;
+    public Task StopAsync()  => HandlerImpl?.StopAsync()  ?? Task.CompletedTask;
 
     public async ValueTask DisposeAsync()
     {

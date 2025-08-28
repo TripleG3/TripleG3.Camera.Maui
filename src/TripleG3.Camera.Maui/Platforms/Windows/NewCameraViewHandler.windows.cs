@@ -7,11 +7,10 @@ using Windows.Media.Capture;
 using Windows.Media.Capture.Frames;
 using Windows.Devices.Enumeration;
 using Windows.Graphics.DirectX.Direct3D11;
-using TripleG3.Camera.Maui.Controls;
 
 namespace TripleG3.Camera.Maui;
 
-public sealed partial class NewCameraViewHandler : ViewHandler<NewCameraView, CanvasControl>, INewCameraViewHandler
+public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, CanvasControl>, INewCameraViewHandler
 {
     public static IPropertyMapper<NewCameraView, NewCameraViewHandler> Mapper = new PropertyMapper<NewCameraView, NewCameraViewHandler>(ViewHandler.ViewMapper)
     {
@@ -20,10 +19,8 @@ public sealed partial class NewCameraViewHandler : ViewHandler<NewCameraView, Ca
 
     public NewCameraViewHandler() : base(Mapper) { }
 
-    static void MapCameraId(NewCameraViewHandler handler, NewCameraView view)
-    {
+    static void MapCameraId(NewCameraViewHandler handler, NewCameraView view) =>
         handler.VirtualView?.HandlerImpl?.OnCameraIdChanged(view.CameraId);
-    }
 
     CanvasControl? _canvas;
     MediaCapture? _mediaCapture;
@@ -36,10 +33,9 @@ public sealed partial class NewCameraViewHandler : ViewHandler<NewCameraView, Ca
     protected override CanvasControl CreatePlatformView()
     {
         _canvas = new CanvasControl();
-        //_canvas.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(new Windows.UI.Color() { A = 255, R = 150, G = 150, B = 150 });
+        _canvas.Draw += Canvas_Draw;               // subscribe first
         VirtualView.HandlerImpl = this;
-        _canvas.Invalidate();
-        _canvas.Draw += Canvas_Draw;
+        _canvas.Loaded += (_, _) => _canvas.Invalidate(); // initial invalidate after load
         return _canvas;
     }
 
@@ -66,7 +62,7 @@ public sealed partial class NewCameraViewHandler : ViewHandler<NewCameraView, Ca
         if (!_started) return;
         _started = false;
         await CleanupAsync();
-        _canvas?.Invalidate();
+        _ = MainThread.InvokeOnMainThreadAsync(() => _canvas?.Invalidate());
     }
 
     async Task RestartAsync()
@@ -92,17 +88,18 @@ public sealed partial class NewCameraViewHandler : ViewHandler<NewCameraView, Ca
             SharingMode = MediaCaptureSharingMode.ExclusiveControl
         };
         await _mediaCapture.InitializeAsync(settings);
+
         var frameSource = _mediaCapture.FrameSources.Values
             .FirstOrDefault(s => s.Info.SourceKind == MediaFrameSourceKind.Color) ?? _mediaCapture.FrameSources.Values.First();
 
-        var targetFormat = frameSource.SupportedFormats
+        var target = frameSource.SupportedFormats
             .Where(f => f.VideoFormat.Width <= 1280 && f.VideoFormat.Height <= 720)
             .OrderByDescending(f => (double)f.FrameRate.Numerator / f.FrameRate.Denominator)
             .ThenByDescending(f => f.VideoFormat.Width * f.VideoFormat.Height)
             .FirstOrDefault();
-        if (targetFormat != null)
+        if (target != null)
         {
-            try { await frameSource.SetFormatAsync(targetFormat); } catch { }
+            try { await frameSource.SetFormatAsync(target); } catch { }
         }
 
         _reader = await _mediaCapture.CreateFrameReaderAsync(frameSource);
@@ -116,33 +113,38 @@ public sealed partial class NewCameraViewHandler : ViewHandler<NewCameraView, Ca
         using var frame = sender.TryAcquireLatestFrame();
         var surface = frame?.VideoMediaFrame?.Direct3DSurface;
         if (surface == null) return;
-        lock (_surfaceLock)
-        {
-            _latestSurface = surface;
-        }
-        MainThread.InvokeOnMainThreadAsync(() => _canvas?.Invalidate());
+        lock (_surfaceLock) _latestSurface = surface;
+        _ = MainThread.InvokeOnMainThreadAsync(() => _canvas?.Invalidate());
     }
 
     void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         IDirect3DSurface? surface;
-        lock (_surfaceLock)
-            surface = _latestSurface;
-        if (surface == null) return;
+        lock (_surfaceLock) surface = _latestSurface;
+        if (surface == null)
+        {
+            // Optional debug
+            System.Diagnostics.Debug.WriteLine("Canvas_Draw: no surface yet");
+            return;
+        }
+
         try
         {
-            using var bmp = CanvasBitmap.CreateFromDirect3D11Surface(sender.Device, surface);
+            ICanvasResourceCreator resourceCreator = sender.Device;
+            using var canvasBitmap = CanvasBitmap.CreateFromDirect3D11Surface(resourceCreator, surface);
             var ds = args.DrawingSession;
-            var scaleX = sender.ActualWidth / bmp.SizeInPixels.Width;
-            var scaleY = sender.ActualHeight / bmp.SizeInPixels.Height;
-            var scale = Math.Min(scaleX, scaleY);
-            var drawWidth = bmp.SizeInPixels.Width * scale;
-            var drawHeight = bmp.SizeInPixels.Height * scale;
-            var x = (sender.ActualWidth - drawWidth) / 2;
-            var y = (sender.ActualHeight - drawHeight) / 2;
-            ds.DrawImage(bmp, new System.Numerics.Vector2((float)x, (float)y));
+            var scale = Math.Min(sender.ActualWidth / canvasBitmap.SizeInPixels.Width,
+                                 sender.ActualHeight / canvasBitmap.SizeInPixels.Height);
+            var drawW = canvasBitmap.SizeInPixels.Width * scale;
+            var drawH = canvasBitmap.SizeInPixels.Height * scale;
+            var x = (sender.ActualWidth - drawW) / 2;
+            var y = (sender.ActualHeight - drawH) / 2;
+            ds.DrawImage(canvasBitmap, new System.Numerics.Vector2((float)x, (float)y));
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine("Canvas_Draw exception: " + ex.Message);
+        }
     }
 
     async Task CleanupAsync()
@@ -162,8 +164,7 @@ public sealed partial class NewCameraViewHandler : ViewHandler<NewCameraView, Ca
     protected override void DisconnectHandler(CanvasControl platformView)
     {
         _ = CleanupAsync();
-        if (_canvas != null)
-            _canvas.Draw -= Canvas_Draw;
+        if (_canvas != null) _canvas.Draw -= Canvas_Draw;
         base.DisconnectHandler(platformView);
     }
 
