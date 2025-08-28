@@ -1,8 +1,3 @@
-using Microsoft.Maui;
-using Microsoft.Maui.Controls; // for GraphicsView
-using Microsoft.Maui.Graphics;
-using Microsoft.Maui.ApplicationModel;
-
 namespace TripleG3.Camera.Maui;
 
 /// <summary>

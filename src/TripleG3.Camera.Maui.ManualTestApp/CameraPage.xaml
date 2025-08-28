@@ -4,7 +4,7 @@
              xmlns:cam="clr-namespace:TripleG3.Camera.Maui;assembly=TripleG3.Camera.Maui"
              x:Class="TripleG3.Camera.Maui.ManualTestApp.CameraPage"
              Title="Camera Preview">
-    <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*">
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*">
         <VerticalStackLayout Spacing="8" Padding="12" Grid.Row="0">
             <HorizontalStackLayout Spacing="12">
                 <Picker x:Name="CameraPicker" Title="Select Camera" WidthRequest="220" SelectedIndexChanged="CameraPicker_SelectedIndexChanged" />
@@ -14,7 +14,7 @@
             </HorizontalStackLayout>
             <!--<Label FontSize="12" Text="Modes include new GPU view below (NewCameraView)." />-->
         </VerticalStackLayout>
-        <cam:NewCameraView x:Name="GpuCameraView" Grid.Row="1" WidthRequest="500" HeightRequest="500"/>
+        <cam:NewCameraView x:Name="GpuCameraView" Grid.Row="1" HorizontalOptions="Fill" VerticalOptions="Fill"/>
         <!--<ContentView x:Name="PreviewHost" Grid.Row="2" BackgroundColor="Black" />-->
     </Grid>
 </ContentPage>

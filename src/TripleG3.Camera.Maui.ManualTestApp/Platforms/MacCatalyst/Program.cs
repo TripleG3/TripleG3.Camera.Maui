@@ -1,5 +1,4 @@
-﻿using ObjCRuntime;
-using UIKit;
+﻿using UIKit;
 
 namespace TripleG3.Camera.Maui.ManualTestApp
 {

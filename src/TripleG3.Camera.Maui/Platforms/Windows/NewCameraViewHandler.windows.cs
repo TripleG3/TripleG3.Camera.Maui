@@ -1,6 +1,5 @@
 #if WINDOWS
 using Microsoft.Maui.Handlers;
-using Microsoft.UI.Xaml;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.Graphics.Canvas;
 using Windows.Media.Capture;
@@ -9,7 +8,6 @@ using Windows.Devices.Enumeration;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Graphics.Imaging;
 using Windows.Graphics.DirectX;
-using System.Runtime.InteropServices;
 using Windows.Media.MediaProperties;
 using System.Runtime.InteropServices.WindowsRuntime;
 
@@ -20,13 +18,21 @@ public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, CanvasCont
     public static IPropertyMapper<NewCameraView, NewCameraViewHandler> Mapper =
         new PropertyMapper<NewCameraView, NewCameraViewHandler>(ViewHandler.ViewMapper)
         {
-            [nameof(NewCameraView.CameraId)] = MapCameraId
+            [nameof(NewCameraView.CameraId)] = MapCameraId,
+            [nameof(NewCameraView.Height)] = MapHeight,
+            [nameof(NewCameraView.Width)] = MapWidth
         };
 
     public NewCameraViewHandler() : base(Mapper) { }
 
     static void MapCameraId(NewCameraViewHandler handler, NewCameraView view) =>
-        handler.VirtualView?.HandlerImpl?.OnCameraIdChanged(view.CameraId);
+        handler.VirtualView?.NewCameraViewHandler?.OnCameraIdChanged(view.CameraId);
+
+    static void MapHeight(NewCameraViewHandler handler, NewCameraView view) =>
+        handler.VirtualView?.NewCameraViewHandler?.OnHeightChanged(view.Height);
+
+    static void MapWidth(NewCameraViewHandler handler, NewCameraView view) =>
+        handler.VirtualView?.NewCameraViewHandler?.OnWidthChanged(view.Height);
 
     CanvasControl? _canvas;
     MediaCapture? _mediaCapture;
@@ -47,7 +53,7 @@ public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, CanvasCont
         _canvas = new CanvasControl();
         _canvas.Draw += Canvas_Draw;
         _canvas.Loaded += (_, _) => _canvas.Invalidate();
-        VirtualView.HandlerImpl = this;
+        VirtualView.NewCameraViewHandler = this;
         return _canvas;
     }
 
@@ -289,6 +295,22 @@ public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, CanvasCont
     {
         await CleanupAsync();
         GC.SuppressFinalize(this);
+    }
+
+    public void OnHeightChanged(double height)
+    {
+        if (_canvas == null || height < 1)
+            return;
+
+        _canvas.Height = height;
+    }
+
+    public void OnWidthChanged(double width)
+    {
+        if (_canvas == null || width < 1)
+            return;
+
+        _canvas.Width = width;
     }
 }
 #endif
