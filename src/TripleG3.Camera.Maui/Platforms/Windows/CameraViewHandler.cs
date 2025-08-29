@@ -168,9 +168,7 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
             default:
                 break;
         }
-
-        // Marshal invalidate to UI thread
-        _ = MainThread.InvokeOnMainThreadAsync(canvasControl.Invalidate);
+        canvasControl.Invalidate();
     }
 
     private void CanvasDrawDirect3dSurface(CanvasControl sender, CanvasDrawEventArgs args)
