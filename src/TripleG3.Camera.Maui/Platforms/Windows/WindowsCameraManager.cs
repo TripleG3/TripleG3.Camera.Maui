@@ -26,7 +26,7 @@ public sealed class WindowsCameraManager(TypedEventHandler<MediaFrameReader, Med
             if (SelectedCamera == CameraInfo.Empty)
                 return;
             if (mediaStreamer != null)
-                await mediaStreamer.DisposeAsync();
+                await StopAsync(cancellationToken);
             mediaStreamer = await MediaStreamer.CreateAsync(frameReceived, settings =>
             {
                 settings.StreamingCaptureMode = StreamingCaptureMode.Video;
@@ -70,13 +70,14 @@ public sealed class WindowsCameraManager(TypedEventHandler<MediaFrameReader, Med
 
     public override async ValueTask StopAsync(CancellationToken cancellationToken = default)
     {
+        await SyncLock.WaitAsync(cancellationToken);
         if (mediaStreamer == null)
             return;
-        await SyncLock.WaitAsync(cancellationToken);
         try
         {
             await mediaStreamer.StopAsync();
             await mediaStreamer.DisposeAsync();
+            mediaStreamer = null;
             IsStreaming = false;
         }
         finally
