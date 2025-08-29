@@ -52,7 +52,7 @@ public sealed class WindowsCameraManager(TypedEventHandler<MediaFrameReader, Med
 
     public override async ValueTask StartAsync(CancellationToken cancellationToken = default)
     {
-        await StopAsync();
+        await StopAsync(cancellationToken);
         await LoadAsync(cancellationToken);
         await SyncLock.WaitAsync(cancellationToken);
         try
@@ -76,6 +76,8 @@ public sealed class WindowsCameraManager(TypedEventHandler<MediaFrameReader, Med
         try
         {
             await mediaStreamer.StopAsync();
+            await mediaStreamer.DisposeAsync();
+            IsStreaming = false;
         }
         finally
         {

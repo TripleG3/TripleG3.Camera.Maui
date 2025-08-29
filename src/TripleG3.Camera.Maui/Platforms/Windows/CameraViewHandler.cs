@@ -21,14 +21,9 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
     }
 
     private readonly CanvasControl canvasControl = new();
-    private IDirect3DSurface? latestSurface;
-    private readonly Lock surfaceLock = new();
     private DrawMode drawMode;
-
-    // Fallback (when BGRA8 surface not provided)
-    private byte[] pixelBuffer = [];
-    private int fbWidth;
-    private int fbHeight;
+    private bool isProcessingFrame = false;
+    private MediaFrameReference? latestFrame = null;
     private readonly CameraManager cameraManager;
 
     public static IPropertyMapper<CameraView, CameraViewHandler> Mapper = new PropertyMapper<CameraView, CameraViewHandler>(ViewMapper)
@@ -41,8 +36,8 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
     private DrawMode DrawMode
     {
         get => drawMode;
-        set 
-        { 
+        set
+        {
             if (drawMode == value) return;
             drawMode = value;
             if (canvasControl == null) return;
@@ -70,11 +65,10 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
         handler.VirtualView?.CameraViewHandler?.OnHeightChanged(view.Height);
 
     private static void MapWidth(CameraViewHandler handler, CameraView view) =>
-        handler.VirtualView?.CameraViewHandler?.OnWidthChanged(view.Height);
+        handler.VirtualView?.CameraViewHandler?.OnWidthChanged(view.Width);
 
     protected override CanvasControl CreatePlatformView()
     {
-        canvasControl.Draw += CanvasDrawDirect3dSurface;
         canvasControl.Loaded += (_, _) => canvasControl.Invalidate();
         if (canvasControl.IsLoaded)
             canvasControl.Invalidate();
@@ -97,86 +91,41 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
         await MainThread.InvokeOnMainThreadAsync(canvasControl.Invalidate);
     }
 
-    private async void FrameReceived(MediaFrameReader sender, MediaFrameArrivedEventArgs args)
+    private void FrameReceived(MediaFrameReader sender, MediaFrameArrivedEventArgs args)
     {
-        using var frame = sender.TryAcquireLatestFrame();
-        var vmf = frame?.VideoMediaFrame;
-        if (vmf == null) return;
+        if (isProcessingFrame) return;
+        isProcessingFrame = true;
 
-        switch (DrawMode)
+        latestFrame = sender.TryAcquireLatestFrame();
+        if (latestFrame?.VideoMediaFrame == null)
         {
-            case DrawMode.None:
-                DrawMode = vmf.Direct3DSurface != null && vmf.Direct3DSurface.Description.Format == DirectXPixelFormat.B8G8R8A8UIntNormalized
+            latestFrame?.Dispose();
+            latestFrame = null;
+            return;
+        }
+
+        if (DrawMode == DrawMode.None)
+        {
+            DrawMode = latestFrame.VideoMediaFrame.Direct3DSurface != null && latestFrame.VideoMediaFrame.Direct3DSurface.Description.Format == DirectXPixelFormat.B8G8R8A8UIntNormalized
                      ? DrawMode.Direct3DSurface
                      : DrawMode.Fallback;
-                break;
-            case DrawMode.Direct3DSurface:
-                var surface = vmf.Direct3DSurface;
-                lock (surfaceLock)
-                    latestSurface = surface;
-                break;
-            case DrawMode.Fallback:
-                // Fallback path: get SoftwareBitmap in BGRA8
-                SoftwareBitmap? sb = null;
-                try
-                {
-                    // Try existing software bitmap first
-                    sb = vmf.SoftwareBitmap;
-
-                    if (sb == null && vmf.Direct3DSurface != null)
-                    {
-                        // IMPORTANT: use Ignore, not Pre-multiplied, for formats without alpha (e.g. NV12)
-                        sb = await SoftwareBitmap
-                            .CreateCopyFromSurfaceAsync(vmf.Direct3DSurface, BitmapAlphaMode.Ignore)
-                            .AsTask()
-                            .ConfigureAwait(false);
-                    }
-
-                    if (sb == null) return;
-
-                    if (sb.BitmapPixelFormat != BitmapPixelFormat.Bgra8 || sb.BitmapAlphaMode != BitmapAlphaMode.Premultiplied)
-                    {
-                        var converted = SoftwareBitmap.Convert(sb, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-                        if (!ReferenceEquals(sb, converted))
-                            sb.Dispose();
-                        sb = converted;
-                    }
-
-                    int w = sb.PixelWidth;
-                    int h = sb.PixelHeight;
-                    int needed = 4 * w * h;
-                    if (pixelBuffer.Length != needed)
-                        pixelBuffer = new byte[needed];
-
-                    sb.CopyToBuffer(pixelBuffer.AsBuffer());
-
-                    lock (surfaceLock)
-                    {
-                        fbWidth = w;
-                        fbHeight = h;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Fallback conversion error: 0x{ex.HResult:X8} {ex.Message}");
-                }
-                finally
-                {
-                    sb?.Dispose();
-                }
-                break;
-            default:
-                break;
         }
         canvasControl.Invalidate();
     }
 
     private void CanvasDrawDirect3dSurface(CanvasControl sender, CanvasDrawEventArgs args)
     {
+        if (latestFrame?.VideoMediaFrame == null)
+        {
+            latestFrame?.Dispose();
+            isProcessingFrame = false;
+            return;
+        }
+
+        var surface = latestFrame.VideoMediaFrame.Direct3DSurface;
+
         try
         {
-            IDirect3DSurface? surface;
-            lock (surfaceLock) surface = latestSurface;
             using var bmp = CanvasBitmap.CreateFromDirect3D11Surface(sender.Device, surface);
             DrawScaled(sender, args.DrawingSession, bmp);
         }
@@ -184,31 +133,66 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
         {
             System.Diagnostics.Debug.WriteLine("Canvas_Draw exception HRESULT=0x" + ex.HResult.ToString("X8") + " msg=" + ex.Message);
         }
+        finally
+        {
+            latestFrame?.Dispose();
+            latestFrame = null;
+            isProcessingFrame = false;
+        }
     }
 
-    private void CanvasDrawFallback(CanvasControl sender, CanvasDrawEventArgs args)
+    private async void CanvasDrawFallback(CanvasControl sender, CanvasDrawEventArgs args)
     {
+        if (latestFrame?.VideoMediaFrame == null)
+        {
+            latestFrame?.Dispose();
+            isProcessingFrame = false;
+            return;
+        }
+
+        // Try existing software bitmap first
+        var sb = latestFrame.VideoMediaFrame.SoftwareBitmap;
         try
         {
-            int w, h;
-            byte[] local;
-            lock (surfaceLock)
+            if (sb == null && latestFrame.VideoMediaFrame.Direct3DSurface != null)
             {
-                w = fbWidth;
-                h = fbHeight;
-                if (w == 0 || h == 0) { System.Diagnostics.Debug.WriteLine("Canvas_Draw: fallback no data"); return; }
-                local = pixelBuffer;
+                // IMPORTANT: use Ignore, not Pre-multiplied, for formats without alpha (e.g. NV12)
+                sb = await SoftwareBitmap.CreateCopyFromSurfaceAsync(latestFrame.VideoMediaFrame.Direct3DSurface, BitmapAlphaMode.Ignore);
             }
-            using var bmp = CanvasBitmap.CreateFromBytes(sender, local, w, h, DirectXPixelFormat.B8G8R8A8UIntNormalized);
+
+            if (sb == null) return;
+
+            if (sb.BitmapPixelFormat != BitmapPixelFormat.Bgra8 || sb.BitmapAlphaMode != BitmapAlphaMode.Premultiplied)
+            {
+                var converted = SoftwareBitmap.Convert(sb, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                if (!ReferenceEquals(sb, converted))
+                    sb.Dispose();
+                sb = converted;
+            }
+
+            int w = sb.PixelWidth;
+            int h = sb.PixelHeight;
+            int needed = 4 * w * h;
+            var pixelBuffer = new byte[needed];
+            sb.CopyToBuffer(pixelBuffer.AsBuffer());
+            using var bmp = CanvasBitmap.CreateFromBytes(sender, pixelBuffer, w, h, DirectXPixelFormat.B8G8R8A8UIntNormalized);
             DrawScaled(sender, args.DrawingSession, bmp);
+
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine("Canvas_Draw exception HRESULT=0x" + ex.HResult.ToString("X8") + " msg=" + ex.Message);
         }
+        finally
+        {
+            latestFrame?.Dispose();
+            latestFrame = null;
+            sb?.Dispose();
+            isProcessingFrame = false;
+        }
     }
 
-    static void DrawScaled(CanvasControl sender, CanvasDrawingSession ds, CanvasBitmap bmp)
+    private static void DrawScaled(CanvasControl sender, CanvasDrawingSession ds, CanvasBitmap bmp)
     {
         var scale = Math.Min(
             sender.ActualWidth / bmp.SizeInPixels.Width,
@@ -247,11 +231,9 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
 
     public async ValueTask DisposeAsync()
     {
-        lock (surfaceLock)
-        {
-            latestSurface = null;
-            fbWidth = fbHeight = 0;
-        }
+        DrawMode = DrawMode.None;
+        await StopAsync();
+        latestFrame?.Dispose();
         await cameraManager.DisposeAsync();
         GC.SuppressFinalize(this);
     }
