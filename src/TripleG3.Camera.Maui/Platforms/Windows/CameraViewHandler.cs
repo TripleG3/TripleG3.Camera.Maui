@@ -15,14 +15,15 @@ namespace TripleG3.Camera.Maui;
 
 public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, ICameraViewHandler
 {
-    public CameraViewHandler() : base(Mapper) 
+    public CameraViewHandler() : base(Mapper)
     {
-        cameraManager = CameraManager.Create(Reader_FrameArrived);
+        cameraManager = CameraManager.Create(FrameReceived);
     }
 
     private readonly CanvasControl canvasControl = new();
     private IDirect3DSurface? latestSurface;
     private readonly Lock surfaceLock = new();
+    private DrawMode drawMode;
 
     // Fallback (when BGRA8 surface not provided)
     private byte[] pixelBuffer = [];
@@ -36,9 +37,34 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
         [nameof(CameraView.Height)] = MapHeight,
         [nameof(CameraView.Width)] = MapWidth
     };
-    private bool isDirect3dSurface;
 
-    private static void MapCameraInfo(CameraViewHandler handler, CameraView view) =>  handler.VirtualView?.CameraViewHandler?.OnCameraInfoChanged(view.SelectedCamera);
+    private DrawMode DrawMode
+    {
+        get => drawMode;
+        set 
+        { 
+            if (drawMode == value) return;
+            drawMode = value;
+            if (canvasControl == null) return;
+            switch (drawMode)
+            {
+                case DrawMode.None:
+                    canvasControl.Draw -= CanvasDrawDirect3dSurface;
+                    canvasControl.Draw -= CanvasDrawFallback;
+                    break;
+                case DrawMode.Direct3DSurface:
+                    canvasControl.Draw -= CanvasDrawFallback;
+                    canvasControl.Draw += CanvasDrawDirect3dSurface;
+                    break;
+                case DrawMode.Fallback:
+                    canvasControl.Draw -= CanvasDrawDirect3dSurface;
+                    canvasControl.Draw += CanvasDrawFallback;
+                    break;
+            }
+        }
+    }
+
+    private static void MapCameraInfo(CameraViewHandler handler, CameraView view) => handler.VirtualView?.CameraViewHandler?.OnCameraInfoChanged(view.SelectedCamera);
 
     private static void MapHeight(CameraViewHandler handler, CameraView view) =>
         handler.VirtualView?.CameraViewHandler?.OnHeightChanged(view.Height);
@@ -48,7 +74,7 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
 
     protected override CanvasControl CreatePlatformView()
     {
-        canvasControl.Draw += Canvas_Draw;
+        canvasControl.Draw += CanvasDrawDirect3dSurface;
         canvasControl.Loaded += (_, _) => canvasControl.Invalidate();
         if (canvasControl.IsLoaded)
             canvasControl.Invalidate();
@@ -63,111 +89,120 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
     public async void OnCameraInfoChanged(CameraInfo cameraInfo) => await cameraManager.SelectCameraAsync(cameraInfo);
     public async Task StartAsync(CancellationToken cancellationToken) => await cameraManager.StartAsync(cancellationToken);
 
-    public async Task StopAsync()
+    public async Task StopAsync(CancellationToken cancellationToken = default)
     {
-        await cameraManager.StopAsync();
-        _ = MainThread.InvokeOnMainThreadAsync(canvasControl.Invalidate);
+        await cameraManager.StopAsync(cancellationToken);
+        canvasControl.Draw -= CanvasDrawDirect3dSurface;
+        canvasControl.Draw -= CanvasDrawFallback;
+        await MainThread.InvokeOnMainThreadAsync(canvasControl.Invalidate);
     }
 
-    private async void Reader_FrameArrived(MediaFrameReader sender, MediaFrameArrivedEventArgs args)
+    private async void FrameReceived(MediaFrameReader sender, MediaFrameArrivedEventArgs args)
     {
-        if (!IsStreaming) return;
         using var frame = sender.TryAcquireLatestFrame();
         var vmf = frame?.VideoMediaFrame;
         if (vmf == null) return;
-        isDirect3dSurface = vmf.Direct3DSurface != null && vmf.Direct3DSurface.Description.Format == DirectXPixelFormat.B8G8R8A8UIntNormalized;
-        if (isDirect3dSurface)
+
+        switch (DrawMode)
         {
-            var surface = vmf.Direct3DSurface;
-            lock (surfaceLock)
-                latestSurface = surface;
-        }
-        else
-        {
-            // Fallback path: get SoftwareBitmap in BGRA8
-            SoftwareBitmap? sb = null;
-            try
-            {
-                // Try existing software bitmap first
-                sb = vmf.SoftwareBitmap;
-
-                if (sb == null && vmf.Direct3DSurface != null)
-                {
-                    // IMPORTANT: use Ignore, not Premultiplied, for formats without alpha (e.g. NV12)
-                    sb = await SoftwareBitmap
-                        .CreateCopyFromSurfaceAsync(vmf.Direct3DSurface, BitmapAlphaMode.Ignore)
-                        .AsTask()
-                        .ConfigureAwait(false);
-                }
-
-                if (sb == null) return;
-
-                if (sb.BitmapPixelFormat != BitmapPixelFormat.Bgra8 || sb.BitmapAlphaMode != BitmapAlphaMode.Premultiplied)
-                {
-                    var converted = SoftwareBitmap.Convert(sb, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-                    if (!ReferenceEquals(sb, converted))
-                        sb.Dispose();
-                    sb = converted;
-                }
-
-                int w = sb.PixelWidth;
-                int h = sb.PixelHeight;
-                int needed = 4 * w * h;
-                if (pixelBuffer.Length != needed)
-                    pixelBuffer = new byte[needed];
-
-                sb.CopyToBuffer(pixelBuffer.AsBuffer());
-
+            case DrawMode.None:
+                DrawMode = vmf.Direct3DSurface != null && vmf.Direct3DSurface.Description.Format == DirectXPixelFormat.B8G8R8A8UIntNormalized
+                     ? DrawMode.Direct3DSurface
+                     : DrawMode.Fallback;
+                break;
+            case DrawMode.Direct3DSurface:
+                var surface = vmf.Direct3DSurface;
                 lock (surfaceLock)
+                    latestSurface = surface;
+                break;
+            case DrawMode.Fallback:
+                // Fallback path: get SoftwareBitmap in BGRA8
+                SoftwareBitmap? sb = null;
+                try
                 {
-                    fbWidth = w;
-                    fbHeight = h;
+                    // Try existing software bitmap first
+                    sb = vmf.SoftwareBitmap;
+
+                    if (sb == null && vmf.Direct3DSurface != null)
+                    {
+                        // IMPORTANT: use Ignore, not Pre-multiplied, for formats without alpha (e.g. NV12)
+                        sb = await SoftwareBitmap
+                            .CreateCopyFromSurfaceAsync(vmf.Direct3DSurface, BitmapAlphaMode.Ignore)
+                            .AsTask()
+                            .ConfigureAwait(false);
+                    }
+
+                    if (sb == null) return;
+
+                    if (sb.BitmapPixelFormat != BitmapPixelFormat.Bgra8 || sb.BitmapAlphaMode != BitmapAlphaMode.Premultiplied)
+                    {
+                        var converted = SoftwareBitmap.Convert(sb, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                        if (!ReferenceEquals(sb, converted))
+                            sb.Dispose();
+                        sb = converted;
+                    }
+
+                    int w = sb.PixelWidth;
+                    int h = sb.PixelHeight;
+                    int needed = 4 * w * h;
+                    if (pixelBuffer.Length != needed)
+                        pixelBuffer = new byte[needed];
+
+                    sb.CopyToBuffer(pixelBuffer.AsBuffer());
+
+                    lock (surfaceLock)
+                    {
+                        fbWidth = w;
+                        fbHeight = h;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Fallback conversion error: 0x{ex.HResult:X8} {ex.Message}");
-            }
-            finally
-            {
-                sb?.Dispose();
-            }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Fallback conversion error: 0x{ex.HResult:X8} {ex.Message}");
+                }
+                finally
+                {
+                    sb?.Dispose();
+                }
+                break;
+            default:
+                break;
         }
 
         // Marshal invalidate to UI thread
         _ = MainThread.InvokeOnMainThreadAsync(canvasControl.Invalidate);
     }
 
-    void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
+    private void CanvasDrawDirect3dSurface(CanvasControl sender, CanvasDrawEventArgs args)
     {
         try
         {
-            if (!isDirect3dSurface)
+            IDirect3DSurface? surface;
+            lock (surfaceLock) surface = latestSurface;
+            using var bmp = CanvasBitmap.CreateFromDirect3D11Surface(sender.Device, surface);
+            DrawScaled(sender, args.DrawingSession, bmp);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine("Canvas_Draw exception HRESULT=0x" + ex.HResult.ToString("X8") + " msg=" + ex.Message);
+        }
+    }
+
+    private void CanvasDrawFallback(CanvasControl sender, CanvasDrawEventArgs args)
+    {
+        try
+        {
+            int w, h;
+            byte[] local;
+            lock (surfaceLock)
             {
-                int w, h;
-                byte[] local;
-                lock (surfaceLock)
-                {
-                    w = fbWidth;
-                    h = fbHeight;
-                    if (w == 0 || h == 0) { System.Diagnostics.Debug.WriteLine("Canvas_Draw: fallback no data"); return; }
-                    local = pixelBuffer;
-                }
-                using var bmp = CanvasBitmap.CreateFromBytes(sender, local, w, h, DirectXPixelFormat.B8G8R8A8UIntNormalized);
-                DrawScaled(sender, args.DrawingSession, bmp);
+                w = fbWidth;
+                h = fbHeight;
+                if (w == 0 || h == 0) { System.Diagnostics.Debug.WriteLine("Canvas_Draw: fallback no data"); return; }
+                local = pixelBuffer;
             }
-            else
-            {
-                IDirect3DSurface? surface;
-                lock (surfaceLock) surface = latestSurface;
-                if (surface == null)
-                {
-                    System.Diagnostics.Debug.WriteLine("Canvas_Draw: no surface");
-                    return;
-                }
-                using var bmp = CanvasBitmap.CreateFromDirect3D11Surface(sender.Device, surface);
-                DrawScaled(sender, args.DrawingSession, bmp);
-            }
+            using var bmp = CanvasBitmap.CreateFromBytes(sender, local, w, h, DirectXPixelFormat.B8G8R8A8UIntNormalized);
+            DrawScaled(sender, args.DrawingSession, bmp);
         }
         catch (Exception ex)
         {
@@ -190,7 +225,7 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
     protected override async void DisconnectHandler(CanvasControl platformView)
     {
         await cameraManager.CleanupAsync();
-        if (canvasControl != null) canvasControl.Draw -= Canvas_Draw;
+        if (canvasControl != null) canvasControl.Draw -= CanvasDrawDirect3dSurface;
         base.DisconnectHandler(platformView);
     }
 
@@ -210,7 +245,6 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
         canvasControl.Width = width;
     }
 
-    public async Task StartAsync() => await cameraManager.StartAsync();
     public async ValueTask LoadAsync(CancellationToken cancellationToken = default) => await cameraManager.LoadAsync(cancellationToken);
 
     public async ValueTask DisposeAsync()
@@ -223,5 +257,12 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
         await cameraManager.DisposeAsync();
         GC.SuppressFinalize(this);
     }
+}
+
+internal enum DrawMode
+{
+    None,
+    Direct3DSurface,
+    Fallback
 }
 #endif

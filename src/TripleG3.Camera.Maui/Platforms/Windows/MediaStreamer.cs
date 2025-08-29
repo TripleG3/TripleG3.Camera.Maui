@@ -13,13 +13,23 @@ public sealed partial class MediaStreamer : IAsyncDisposable
     private readonly MediaCapture mediaCapture;
 
     public static async Task<MediaStreamer> CreateAsync(TypedEventHandler<MediaFrameReader, MediaFrameArrivedEventArgs> frameReceived, Action<MediaCaptureInitializationSettings> configureSettings)
-    {        
+    {
         var settings = new MediaCaptureInitializationSettings();
         configureSettings(settings);
         var mediaCapture = new MediaCapture();
         await mediaCapture.InitializeAsync(settings);
+        MediaFrameSource frameSource = await SelectFrameSourceAsync(mediaCapture);
 
-        var frameSource = mediaCapture.FrameSources.Values.FirstOrDefault(s => s.Info.SourceKind == MediaFrameSourceKind.Color) ?? mediaCapture.FrameSources.Values.First();
+        var mediaFrameReader = await mediaCapture.CreateFrameReaderAsync(frameSource);
+        mediaFrameReader.FrameArrived += frameReceived;
+
+        return new MediaStreamer(mediaFrameReader, frameReceived, mediaCapture);
+    }
+
+    private static async Task<MediaFrameSource> SelectFrameSourceAsync(MediaCapture mediaCapture)
+    {
+        var frameSource = mediaCapture.FrameSources.Values.FirstOrDefault(s => s.Info.SourceKind == MediaFrameSourceKind.Color) 
+                       ?? mediaCapture.FrameSources.Values.First();
 
         // Prefer BGRA8 highest FPS <=1280x720
         var formats = frameSource.SupportedFormats.ToList();
@@ -33,17 +43,13 @@ public sealed partial class MediaStreamer : IAsyncDisposable
                                     .OrderByDescending(f => (double)f.FrameRate.Numerator / f.FrameRate.Denominator)
                                     .ThenByDescending(f => f.VideoFormat.Width * f.VideoFormat.Height)
                                     .FirstOrDefault();
-
         if (chosen != null)
         {
             try { await frameSource.SetFormatAsync(chosen); }
             catch { }
         }
 
-        var mediaFrameReader = await mediaCapture.CreateFrameReaderAsync(frameSource);
-        mediaFrameReader.FrameArrived += frameReceived;
-
-        return new MediaStreamer(mediaFrameReader, frameReceived, mediaCapture);
+        return frameSource;
     }
 
     private MediaStreamer(MediaFrameReader mediaFrameReader, TypedEventHandler<MediaFrameReader, MediaFrameArrivedEventArgs> frameReceived, MediaCapture mediaCapture)

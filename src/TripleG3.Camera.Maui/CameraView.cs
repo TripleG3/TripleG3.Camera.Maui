@@ -54,8 +54,8 @@ public interface ICameraViewHandler : IAsyncDisposable
     void OnCameraInfoChanged(CameraInfo cameraInfo);
     void OnHeightChanged(double height);
     void OnWidthChanged(double height);
-    Task StartAsync();
-    Task StopAsync();
+    Task StartAsync(CancellationToken cancellationToken = default);
+    Task StopAsync(CancellationToken cancellationToken = default);
     ValueTask LoadAsync(CancellationToken cancellationToken = default);
     ImmutableList<CameraInfo> CameraInfos { get; }
 }
