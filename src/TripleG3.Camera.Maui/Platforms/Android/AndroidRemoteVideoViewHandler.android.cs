@@ -68,7 +68,21 @@ public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
                     pixels[p] = (A << 24) | (R << 16) | (G << 8) | B;
                 }
                 bmp.SetPixels(pixels, 0, w, 0, 0, w, h);
-                canvas.DrawBitmap(bmp, null, new Android.Graphics.Rect(0, 0, tv.Width, tv.Height), null);
+                var vw = tv.Width;
+                var vh = tv.Height;
+                if (vw > 0 && vh > 0)
+                {
+                    float scale = Math.Min((float)vw / w, (float)vh / h);
+                    int dw = (int)(w * scale);
+                    int dh = (int)(h * scale);
+                    int dx = (vw - dw) / 2;
+                    int dy = (vh - dh) / 2;
+                    canvas.DrawBitmap(bmp, null, new Android.Graphics.Rect(dx, dy, dx + dw, dy + dh), null);
+                }
+                else
+                {
+                    canvas.DrawBitmap(bmp, 0, 0, null);
+                }
             }
             finally { bmp.Dispose(); }
         }

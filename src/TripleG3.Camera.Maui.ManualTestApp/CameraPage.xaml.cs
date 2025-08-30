@@ -11,9 +11,11 @@ public partial class CameraPage : ContentPage
     Guid _bufferSubscription;
     readonly Queue<CameraFrame> _bufferQueue = new();
     readonly object _bufferGate = new();
-    const int MaxBufferFrames = 30; // ~1-2s depending on FPS
+    const int MaxBufferFrames = 60; // allow up to ~4s at 15fps
+    const int MinBufferFrames = 15; // need at least ~1s before starting buffered playback
     bool _playBuffered;
     bool _showBuffered; // current mode
+    bool _bufferPlaying; // indicates buffered playback has started (after threshold)
 
     public CameraPage()
     {
@@ -83,10 +85,22 @@ public partial class CameraPage : ContentPage
                     CameraFrame? next = null;
                     lock (_bufferGate)
                     {
-                        if (_bufferQueue.Count > 0)
-                            next = _bufferQueue.Dequeue();
+                        if (_showBuffered)
+                        {
+                            // Start playing only after threshold to create noticeable latency window
+                            if (!_bufferPlaying && _bufferQueue.Count >= MinBufferFrames)
+                                _bufferPlaying = true;
+                            if (_bufferPlaying && _bufferQueue.Count > 0)
+                                next = _bufferQueue.Dequeue();
+                        }
+                        else
+                        {
+                            // If switched back to live, reset buffered playback state
+                            _bufferPlaying = false;
+                            _bufferQueue.Clear();
+                        }
                     }
-                    if (next != null)
+                    if (next != null && _showBuffered)
                     {
                         if (_showBuffered)
                         {
@@ -147,12 +161,31 @@ public partial class CameraPage : ContentPage
         {
             // Buffered
             _showBuffered = true;
+            _bufferPlaying = false; // force re-buffer
         }
         else
         {
             _showBuffered = false;
             // Clear buffer so next switch back starts fresh
             lock (_bufferGate) _bufferQueue.Clear();
+            _bufferPlaying = false;
+        }
+    }
+
+    private void ViewModePicker_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        var remote = RemoteView;
+        var local = GpuCameraView;
+        if (ViewModePicker.SelectedIndex == 1)
+        {
+            // Remote
+            remote.IsVisible = true;
+            local.IsVisible = false;
+        }
+        else
+        {
+            remote.IsVisible = false;
+            local.IsVisible = true;
         }
     }
 }

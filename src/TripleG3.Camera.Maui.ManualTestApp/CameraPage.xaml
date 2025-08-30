@@ -5,7 +5,7 @@
              x:Class="TripleG3.Camera.Maui.ManualTestApp.CameraPage"
              x:DataType="x:Object"
              Title="Camera Preview">
-    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,*">
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*">
         <VerticalStackLayout Spacing="8" Padding="12" Grid.Row="0">
             <HorizontalStackLayout Spacing="12">
         <Picker x:Name="CameraPicker" Title="Select Camera" WidthRequest="220" SelectedIndexChanged="CameraPicker_SelectedIndexChanged"
@@ -25,10 +25,19 @@
                         <x:String>Buffered</x:String>
                     </Picker.Items>
                 </Picker>
+                <Label Text="View:" VerticalOptions="Center" />
+                <Picker x:Name="ViewModePicker" WidthRequest="110" SelectedIndexChanged="ViewModePicker_SelectedIndexChanged">
+                    <Picker.Items>
+                        <x:String>Local</x:String>
+                        <x:String>Remote</x:String>
+                    </Picker.Items>
+                </Picker>
             </HorizontalStackLayout>
             <!--<Label FontSize="12" Text="Modes include new GPU view below (NewCameraView)." />-->
         </VerticalStackLayout>
-    <cam:CameraView x:Name="GpuCameraView" Grid.Row="1" Grid.Column="0" HorizontalOptions="Fill" VerticalOptions="Fill"/>
-    <cam:RemoteVideoView x:Name="RemoteView" Grid.Row="1" Grid.Column="1" />
+    <Grid Grid.Row="1">
+        <cam:CameraView x:Name="GpuCameraView" HorizontalOptions="Fill" VerticalOptions="Fill"/>
+        <cam:RemoteVideoView x:Name="RemoteView" IsVisible="False" />
+    </Grid>
     </Grid>
 </ContentPage>
