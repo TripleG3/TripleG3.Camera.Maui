@@ -25,7 +25,10 @@ public partial class CameraPage : ContentPage
             if (_cameras.Count > 0)
             {
                 CameraPicker.SelectedIndex = 0;
-                GpuCameraView.CameraId = _cameras[0].Id;
+                GpuCameraView.CameraId = _cameras[0].Id; // sets default camera id
+                // Auto-start preview on first appearance
+                if (!GpuCameraView.IsRunning)
+                    await GpuCameraView.StartAsync();
             }
         }
         catch (Exception ex)
