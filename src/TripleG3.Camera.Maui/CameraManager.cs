@@ -8,9 +8,47 @@ namespace TripleG3.Camera.Maui;
 public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
 {
     protected readonly SemaphoreSlim SyncLock = new(1, 1);
-    public CameraInfo SelectedCamera { get; protected set; } = CameraInfo.Empty;
-    public ImmutableList<CameraInfo> CameraInfos { get; protected set; } = [];
-    public bool IsStreaming { get; protected set; }
+    private ImmutableList<CameraInfo> cameraInfos = [];
+    private CameraInfo selectedCamera = CameraInfo.Empty;
+    private bool isStreaming;
+
+    public event Action<ImmutableList<CameraInfo>> CameraInfosChanged = delegate { };
+    public event Action<CameraInfo> SelectedCameraChanged = delegate { };
+    public event Action<bool> IsStreamingChanged = delegate { };
+    public CameraInfo SelectedCamera 
+    { 
+        get => selectedCamera;
+        protected set
+        {
+            if (selectedCamera == value)
+                return;
+            selectedCamera = value;
+            SelectedCameraChanged.Invoke(selectedCamera);
+        }
+    }
+    public ImmutableList<CameraInfo> CameraInfos 
+    { 
+        get => cameraInfos;
+        protected set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (cameraInfos == value)
+                return;
+            cameraInfos = value;
+            CameraInfosChanged.Invoke(cameraInfos);
+        }
+    }
+    public bool IsStreaming 
+    { 
+        get => isStreaming;
+        protected set
+        {
+            if (isStreaming == value)
+                return;
+            isStreaming = value;
+            IsStreamingChanged(isStreaming);
+        }
+    }
 
 #if ANDROID
     public static CameraManager Create()

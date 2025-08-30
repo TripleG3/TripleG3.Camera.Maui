@@ -10,25 +10,58 @@ public sealed partial class MediaStreamer : IAsyncDisposable
 {
     private readonly MediaFrameReader mediaFrameReader;
     private readonly TypedEventHandler<MediaFrameReader, MediaFrameArrivedEventArgs> frameReceived;
-    private readonly MediaCapture mediaCapture;
+    private bool isStreaming;
+    private bool isDisposed;
 
+    public event Action<bool> IsStreamingChanged = delegate { };
     public static async Task<MediaStreamer> CreateAsync(TypedEventHandler<MediaFrameReader, MediaFrameArrivedEventArgs> frameReceived, Action<MediaCaptureInitializationSettings> configureSettings)
     {
         var settings = new MediaCaptureInitializationSettings();
         configureSettings(settings);
         var mediaCapture = new MediaCapture();
         await mediaCapture.InitializeAsync(settings);
-        MediaFrameSource frameSource = await SelectFrameSourceAsync(mediaCapture);
-
-        var mediaFrameReader = await mediaCapture.CreateFrameReaderAsync(frameSource);
+        var mediaFrameSource = await SelectFrameSourceAsync(mediaCapture);
+        var mediaFrameReader = await mediaCapture.CreateFrameReaderAsync(mediaFrameSource);
         mediaFrameReader.FrameArrived += frameReceived;
 
-        return new MediaStreamer(mediaFrameReader, frameReceived, mediaCapture);
+        return new MediaStreamer(mediaFrameReader, frameReceived);
+    }
+
+    private MediaStreamer(MediaFrameReader mediaFrameReader, TypedEventHandler<MediaFrameReader, MediaFrameArrivedEventArgs> frameReceived)
+    {
+        this.mediaFrameReader = mediaFrameReader;
+        this.frameReceived = frameReceived;
+    }
+
+    public bool IsStreaming
+    {
+        get => isStreaming;
+        private set
+        {
+            if (isStreaming == value) return;
+            isStreaming = value;
+            IsStreamingChanged(isStreaming);
+        }
+    }
+
+    public IAsyncOperation<MediaFrameReaderStartStatus> StartAsync()
+    {
+        ObjectDisposedException.ThrowIf(isDisposed, nameof(MediaStreamer));
+        IsStreaming = true;
+        return mediaFrameReader.StartAsync();
+    }
+
+    public IAsyncAction StopAsync()
+    {
+        ObjectDisposedException.ThrowIf(isDisposed, nameof(MediaStreamer));
+        var result = mediaFrameReader.StopAsync();
+        IsStreaming = false;
+        return result;
     }
 
     private static async Task<MediaFrameSource> SelectFrameSourceAsync(MediaCapture mediaCapture)
     {
-        var frameSource = mediaCapture.FrameSources.Values.FirstOrDefault(s => s.Info.SourceKind == MediaFrameSourceKind.Color) 
+        var frameSource = mediaCapture.FrameSources.Values.FirstOrDefault(s => s.Info.SourceKind == MediaFrameSourceKind.Color)
                        ?? mediaCapture.FrameSources.Values.First();
 
         // Prefer BGRA8 highest FPS <=1280x720
@@ -52,35 +85,16 @@ public sealed partial class MediaStreamer : IAsyncDisposable
         return frameSource;
     }
 
-    private MediaStreamer(MediaFrameReader mediaFrameReader, TypedEventHandler<MediaFrameReader, MediaFrameArrivedEventArgs> frameReceived, MediaCapture mediaCapture)
-    {
-        this.mediaFrameReader = mediaFrameReader;
-        this.frameReceived = frameReceived;
-        this.mediaCapture = mediaCapture;
-    }
-
-    public bool IsStarted { get; private set; }
-    public IAsyncOperation<MediaFrameReaderStartStatus> StartAsync()
-    {
-        IsStarted = true;
-        return mediaFrameReader.StartAsync();
-    }
-    public IAsyncAction StopAsync()
-    {
-        var result = mediaFrameReader.StopAsync();
-        IsStarted = false;
-        return result;
-    }
-
     public async ValueTask DisposeAsync()
     {
+        if (isDisposed) return;
+        isDisposed = true;
         if (mediaFrameReader != null)
         {
-            try { await mediaFrameReader.StopAsync(); } catch { }
             mediaFrameReader.FrameArrived -= frameReceived;
+            try { await mediaFrameReader.StopAsync(); } catch { }
             mediaFrameReader.Dispose();
         }
-        mediaCapture?.Dispose();
     }
 }
 
