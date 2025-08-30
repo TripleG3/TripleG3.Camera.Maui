@@ -7,6 +7,9 @@ public partial class CameraPage : ContentPage
     bool _initialized;
     ICameraFrameBroadcaster? _broadcaster;
     IRemoteFrameDistributor? _remoteDist;
+    // Separate distributors so Remote view shows only selected feed without overlap
+    readonly RemoteFrameDistributor _liveDistributor = new();
+    readonly RemoteFrameDistributor _bufferedDistributor = new();
     Guid _liveSubscription;
     Guid _bufferSubscription;
     readonly Queue<CameraFrame> _bufferQueue = new();
@@ -52,14 +55,14 @@ public partial class CameraPage : ContentPage
 
     void EnsureLocalSubscription()
     {
-        if (_broadcaster == null || _remoteDist == null) return;
+    if (_broadcaster == null || _remoteDist == null) return;
         if (_liveSubscription == Guid.Empty)
         {
             _liveSubscription = _broadcaster.Subscribe(frame =>
             {
                 if (!_showBuffered)
                 {
-                    MainThread.BeginInvokeOnMainThread(() => _remoteDist.Push(frame));
+                    MainThread.BeginInvokeOnMainThread(() => _liveDistributor.Push(frame));
                 }
             });
         }
@@ -105,7 +108,7 @@ public partial class CameraPage : ContentPage
                         if (_showBuffered)
                         {
                             var frame = next.Value;
-                            MainThread.BeginInvokeOnMainThread(() => _remoteDist?.Push(frame));
+                            MainThread.BeginInvokeOnMainThread(() => _bufferedDistributor.Push(frame));
                         }
                     }
                     await Task.Delay(66); // ~15 fps playback
@@ -162,6 +165,7 @@ public partial class CameraPage : ContentPage
             // Buffered
             _showBuffered = true;
             _bufferPlaying = false; // force re-buffer
+            FeedStatusLabel.Text = "Buffering...";
         }
         else
         {
@@ -169,6 +173,11 @@ public partial class CameraPage : ContentPage
             // Clear buffer so next switch back starts fresh
             lock (_bufferGate) _bufferQueue.Clear();
             _bufferPlaying = false;
+            FeedStatusLabel.Text = "Live";
+            // Immediately show latest live frame stream
+            _bufferedDistributor.UnregisterSink(OnBufferedFrame);
+            _liveDistributor.UnregisterSink(OnLiveFrame);
+            _liveDistributor.RegisterSink(OnLiveFrame);
         }
     }
 
@@ -181,11 +190,33 @@ public partial class CameraPage : ContentPage
             // Remote
             remote.IsVisible = true;
             local.IsVisible = false;
+            // Attach appropriate sink based on current mode
+            _liveDistributor.UnregisterSink(OnLiveFrame);
+            _bufferedDistributor.UnregisterSink(OnBufferedFrame);
+            if (_showBuffered)
+                _bufferedDistributor.RegisterSink(OnBufferedFrame);
+            else
+                _liveDistributor.RegisterSink(OnLiveFrame);
         }
         else
         {
             remote.IsVisible = false;
             local.IsVisible = true;
+            _liveDistributor.UnregisterSink(OnLiveFrame);
+            _bufferedDistributor.UnregisterSink(OnBufferedFrame);
         }
+    }
+
+    void OnLiveFrame(CameraFrame frame)
+    {
+        // Pass to platform handler via shared global distributor also (kept for network placeholder)
+        _remoteDist?.Push(frame);
+    }
+
+    void OnBufferedFrame(CameraFrame frame)
+    {
+        _remoteDist?.Push(frame);
+        if (_showBuffered && _bufferPlaying && FeedStatusLabel.Text != "Buffered")
+            FeedStatusLabel.Text = "Buffered";
     }
 }

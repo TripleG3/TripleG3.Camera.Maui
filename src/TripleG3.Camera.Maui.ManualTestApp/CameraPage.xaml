@@ -32,6 +32,7 @@
                         <x:String>Remote</x:String>
                     </Picker.Items>
                 </Picker>
+                <Label x:Name="FeedStatusLabel" Text="Live" FontSize="12" TextColor="Gray" VerticalOptions="Center" />
             </HorizontalStackLayout>
             <!--<Label FontSize="12" Text="Modes include new GPU view below (NewCameraView)." />-->
         </VerticalStackLayout>
