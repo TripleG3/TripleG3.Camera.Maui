@@ -13,25 +13,25 @@ using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace TripleG3.Camera.Maui;
 
-public sealed class NewCameraViewHandler : ViewHandler<NewCameraView, CanvasControl>, INewCameraViewHandler
+public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasControl>, INewCameraViewHandler
 {
-    public static IPropertyMapper<NewCameraView, NewCameraViewHandler> Mapper =
-        new PropertyMapper<NewCameraView, NewCameraViewHandler>(ViewHandler.ViewMapper)
+    public static IPropertyMapper<CameraView, WindowsCameraViewHandler> Mapper =
+        new PropertyMapper<CameraView, WindowsCameraViewHandler>(ViewHandler.ViewMapper)
         {
-            [nameof(NewCameraView.CameraId)] = MapCameraId,
-            [nameof(NewCameraView.Height)] = MapHeight,
-            [nameof(NewCameraView.Width)] = MapWidth
+            [nameof(CameraView.CameraId)] = MapCameraId,
+            [nameof(CameraView.Height)] = MapHeight,
+            [nameof(CameraView.Width)] = MapWidth
         };
 
-    public NewCameraViewHandler() : base(Mapper) { }
+    public WindowsCameraViewHandler() : base(Mapper) { }
 
-    static void MapCameraId(NewCameraViewHandler handler, NewCameraView view) =>
+    static void MapCameraId(WindowsCameraViewHandler handler, CameraView view) =>
         handler.VirtualView?.NewCameraViewHandler?.OnCameraIdChanged(view.CameraId);
 
-    static void MapHeight(NewCameraViewHandler handler, NewCameraView view) =>
+    static void MapHeight(WindowsCameraViewHandler handler, CameraView view) =>
         handler.VirtualView?.NewCameraViewHandler?.OnHeightChanged(view.Height);
 
-    static void MapWidth(NewCameraViewHandler handler, NewCameraView view) =>
+    static void MapWidth(WindowsCameraViewHandler handler, CameraView view) =>
         handler.VirtualView?.NewCameraViewHandler?.OnWidthChanged(view.Height);
 
     CanvasControl? _canvas;

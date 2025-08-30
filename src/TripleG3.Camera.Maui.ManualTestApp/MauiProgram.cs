@@ -17,7 +17,7 @@ public static class MauiProgram
             .ConfigureMauiHandlers(h =>
             {
 #if WINDOWS
-                h.AddHandler<NewCameraView, NewCameraViewHandler>();
+                h.AddHandler<CameraView, WindowsCameraViewHandler>();
 #endif
             });
 
