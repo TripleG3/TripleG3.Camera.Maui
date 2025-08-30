@@ -7,7 +7,13 @@ public partial class CameraPage : ContentPage
     bool _initialized;
     ICameraFrameBroadcaster? _broadcaster;
     IRemoteFrameDistributor? _remoteDist;
-    Guid _localSubscription;
+    Guid _liveSubscription;
+    Guid _bufferSubscription;
+    readonly Queue<CameraFrame> _bufferQueue = new();
+    readonly object _bufferGate = new();
+    const int MaxBufferFrames = 30; // ~1-2s depending on FPS
+    bool _playBuffered;
+    bool _showBuffered; // current mode
 
     public CameraPage()
     {
@@ -45,12 +51,53 @@ public partial class CameraPage : ContentPage
     void EnsureLocalSubscription()
     {
         if (_broadcaster == null || _remoteDist == null) return;
-        if (_localSubscription != Guid.Empty) return;
-        _localSubscription = _broadcaster.Subscribe(frame =>
+        if (_liveSubscription == Guid.Empty)
         {
-            // In real scenario, serialize + send over network. For now, loopback to remote distributor if host/port set.
-            MainThread.BeginInvokeOnMainThread(() => _remoteDist.Push(frame));
-        });
+            _liveSubscription = _broadcaster.Subscribe(frame =>
+            {
+                if (!_showBuffered)
+                {
+                    MainThread.BeginInvokeOnMainThread(() => _remoteDist.Push(frame));
+                }
+            });
+        }
+        if (_bufferSubscription == Guid.Empty)
+        {
+            _bufferSubscription = _broadcaster.Subscribe(frame =>
+            {
+                lock (_bufferGate)
+                {
+                    _bufferQueue.Enqueue(frame);
+                    while (_bufferQueue.Count > MaxBufferFrames) _bufferQueue.Dequeue();
+                }
+            });
+        }
+        // Kick off buffered playback timer once
+        if (!_playBuffered)
+        {
+            _playBuffered = true;
+            _ = Task.Run(async () =>
+            {
+                while (_playBuffered)
+                {
+                    CameraFrame? next = null;
+                    lock (_bufferGate)
+                    {
+                        if (_bufferQueue.Count > 0)
+                            next = _bufferQueue.Dequeue();
+                    }
+                    if (next != null)
+                    {
+                        if (_showBuffered)
+                        {
+                            var frame = next.Value;
+                            MainThread.BeginInvokeOnMainThread(() => _remoteDist?.Push(frame));
+                        }
+                    }
+                    await Task.Delay(66); // ~15 fps playback
+                }
+            });
+        }
     }
 
     private async void CameraPicker_SelectedIndexChanged(object sender, EventArgs e)
@@ -90,7 +137,22 @@ public partial class CameraPage : ContentPage
     {
         // Placeholder: would establish network connection using RemoteHostEntry.Text and RemotePortEntry.Text.
         // For now just ensure subscription loopback is active.
-        EnsureLocalSubscription();
-        DisplayAlert("Connect", "Loopback connection active (placeholder for network).", "OK");
+    EnsureLocalSubscription();
+    DisplayAlert("Connect", "Loopback connection active (placeholder for network).", "OK");
+    }
+
+    private void FeedModePicker_SelectedIndexChanged(object sender, EventArgs e)
+    {
+        if (FeedModePicker.SelectedIndex == 1)
+        {
+            // Buffered
+            _showBuffered = true;
+        }
+        else
+        {
+            _showBuffered = false;
+            // Clear buffer so next switch back starts fresh
+            lock (_bufferGate) _bufferQueue.Clear();
+        }
     }
 }

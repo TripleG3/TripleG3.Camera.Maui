@@ -15,13 +15,20 @@
                 <Button Text="Stop" Clicked="OnStopClicked" />
             </HorizontalStackLayout>
             <HorizontalStackLayout Spacing="8">
-                <Entry x:Name="RemoteHostEntry" Placeholder="Remote Host" WidthRequest="200" />
-                <Entry x:Name="RemotePortEntry" Placeholder="Port" Keyboard="Numeric" WidthRequest="80" />
+                <Entry x:Name="RemoteHostEntry" Placeholder="Remote Host" WidthRequest="160" />
+                <Entry x:Name="RemotePortEntry" Placeholder="Port" Keyboard="Numeric" WidthRequest="70" />
                 <Button Text="Connect" Clicked="OnConnectClicked" />
+                <Label Text="Feed:" VerticalOptions="Center" />
+                <Picker x:Name="FeedModePicker" WidthRequest="120" SelectedIndexChanged="FeedModePicker_SelectedIndexChanged">
+                    <Picker.Items>
+                        <x:String>Live</x:String>
+                        <x:String>Buffered</x:String>
+                    </Picker.Items>
+                </Picker>
             </HorizontalStackLayout>
             <!--<Label FontSize="12" Text="Modes include new GPU view below (NewCameraView)." />-->
         </VerticalStackLayout>
-        <cam:CameraView x:Name="GpuCameraView" Grid.Row="1" Grid.Column="0" HorizontalOptions="Fill" VerticalOptions="Fill"/>
-        <cam:RemoteVideoView x:Name="RemoteView" Grid.Row="1" Grid.Column="1" BackgroundColor="Black" />
+    <cam:CameraView x:Name="GpuCameraView" Grid.Row="1" Grid.Column="0" HorizontalOptions="Fill" VerticalOptions="Fill"/>
+    <cam:RemoteVideoView x:Name="RemoteView" Grid.Row="1" Grid.Column="1" />
     </Grid>
 </ContentPage>

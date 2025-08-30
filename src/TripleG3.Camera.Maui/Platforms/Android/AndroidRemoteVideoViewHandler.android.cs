@@ -2,23 +2,27 @@
 using Microsoft.Maui.Handlers;
 using Android.Views;
 using Android.Graphics;
+using Android.Widget;
 
 namespace TripleG3.Camera.Maui;
 
-public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView, TextureView>, IRemoteVideoViewHandler
+public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView, FrameLayout>, IRemoteVideoViewHandler
 {
     public static readonly PropertyMapper<RemoteVideoView, AndroidRemoteVideoViewHandler> Mapper = new(ViewHandler.ViewMapper);
     byte[]? _latest;
     int _w, _h;
     readonly object _gate = new();
-    TextureView? _view;
+    TextureView? _texture;
     public AndroidRemoteVideoViewHandler() : base(Mapper) { }
-    protected override TextureView CreatePlatformView()
+    protected override FrameLayout CreatePlatformView()
     {
-        _view = new TextureView(Android.App.Application.Context!);
-        _view.SurfaceTextureListener = new Listener(this);
+        var ctx = Android.App.Application.Context!;
+        var container = new FrameLayout(ctx);
+        _texture = new TextureView(ctx);
+        _texture.SurfaceTextureListener = new Listener(this);
+        container.AddView(_texture, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
         VirtualView.HandlerImpl = this;
-        return _view;
+        return container;
     }
     class Listener : Java.Lang.Object, TextureView.ISurfaceTextureListener
     {
@@ -45,25 +49,33 @@ public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
     }
     void Draw()
     {
-        var tv = _view; if (tv == null || !tv.IsAvailable) return;
+        var tv = _texture; if (tv == null || !tv.IsAvailable) return;
         byte[]? local; int w, h; lock (_gate) { local = _latest; w = _w; h = _h; }
-        if (local == null || w == 0 || h == 0) return;
-    var bmp = Bitmap.CreateBitmap(w, h, Bitmap.Config.Argb8888!);
-        // Copy BGRA -> ARGB
-        var pixels = new int[w * h];
-        for (int i = 0, p = 0; i < local.Length; i += 4, p++)
-        {
-            byte B = local[i]; byte G = local[i + 1]; byte R = local[i + 2]; byte A = local[i + 3];
-            pixels[p] = (A << 24) | (R << 16) | (G << 8) | B;
-        }
-        bmp.SetPixels(pixels, 0, w, 0, 0, w, h);
         var canvas = tv.LockCanvas();
-        if (canvas != null)
+        if (canvas == null) return;
+        try
         {
-            canvas.DrawBitmap(bmp, null, new Android.Graphics.Rect(0, 0, tv.Width, tv.Height), null);
+            // Always clear to black background
+            canvas.DrawColor(Android.Graphics.Color.Black);
+            if (local == null || w == 0 || h == 0) return;
+            var bmp = Bitmap.CreateBitmap(w, h, Bitmap.Config.Argb8888!);
+            try
+            {
+                var pixels = new int[w * h];
+                for (int i = 0, p = 0; i < local.Length; i += 4, p++)
+                {
+                    byte B = local[i]; byte G = local[i + 1]; byte R = local[i + 2]; byte A = local[i + 3];
+                    pixels[p] = (A << 24) | (R << 16) | (G << 8) | B;
+                }
+                bmp.SetPixels(pixels, 0, w, 0, 0, w, h);
+                canvas.DrawBitmap(bmp, null, new Android.Graphics.Rect(0, 0, tv.Width, tv.Height), null);
+            }
+            finally { bmp.Dispose(); }
+        }
+        finally
+        {
             tv.UnlockCanvasAndPost(canvas);
         }
-        bmp.Dispose();
     }
     static void I420ToBGRA(byte[] src, int w, int h, byte[] dst)
     {
