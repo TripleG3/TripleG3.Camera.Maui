@@ -28,5 +28,9 @@
 	</array>
 	<key>XSAppIconAssets</key>
 	<string>Assets.xcassets/appicon.appiconset</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required to show the live preview.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access may be required for video capture.</string>
 </dict>
 </plist>

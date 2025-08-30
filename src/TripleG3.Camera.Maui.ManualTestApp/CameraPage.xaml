@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:cam="clr-namespace:TripleG3.Camera.Maui;assembly=TripleG3.Camera.Maui"
              x:Class="TripleG3.Camera.Maui.ManualTestApp.CameraPage"
+             x:DataType="x:Object"
              Title="Camera Preview">
     <Grid RowDefinitions="Auto,*" ColumnDefinitions="*">
         <VerticalStackLayout Spacing="8" Padding="12" Grid.Row="0">
