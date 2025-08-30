@@ -21,10 +21,23 @@ public static class MauiProgram
 #endif
             });
 
+    // Services
+    builder.Services.AddSingleton<ICameraService, CameraService>();
+
 #if DEBUG
 		builder.Logging.AddDebug();
 #endif
 
-        return builder.Build();
+    var app = builder.Build();
+    ServiceHelper.Services = app.Services; // expose for pages created via XAML (not constructor injected)
+    return app;
     }
+}
+
+internal static class ServiceHelper
+{
+    public static IServiceProvider? Services { get; set; }
+    public static T GetRequiredService<T>() where T : notnull => Services is null
+    ? throw new InvalidOperationException("Services not initialized")
+    : (T)Services.GetService(typeof(T))!;
 }
