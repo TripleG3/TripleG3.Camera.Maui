@@ -1,0 +1,42 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-android",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/TripleG3.Camera.Maui.ManualTestApp/TripleG3.Camera.Maui.ManualTestApp.csproj",
+        "-c",
+        "Debug",
+        "-f",
+        "net9.0-android"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "run-android",
+      "type": "shell",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "-t:Run",
+        "${workspaceFolder}/src/TripleG3.Camera.Maui.ManualTestApp/TripleG3.Camera.Maui.ManualTestApp.csproj",
+        "-c",
+        "Debug",
+        "-f",
+        "net9.0-android"
+      ],
+      "dependsOn": "build-android",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

@@ -18,6 +18,8 @@ public static class MauiProgram
             {
 #if WINDOWS
                 h.AddHandler<CameraView, WindowsCameraViewHandler>();
+#elif ANDROID
+                h.AddHandler<CameraView, AndroidCameraViewHandler>();
 #endif
             });
 

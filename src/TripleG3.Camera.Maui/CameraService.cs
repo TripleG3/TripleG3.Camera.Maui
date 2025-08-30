@@ -15,8 +15,34 @@ public sealed class CameraService : ICameraService
 #if WINDOWS
                 return GetWindowsCamerasAsync();
 #elif ANDROID
-                // TODO: Implement Android camera enumeration via CameraManager (API 21+) if needed.
-                return Task.FromResult<IReadOnlyList<CameraInfo>>(Array.Empty<CameraInfo>());
+                try
+                {
+                        var mgr = Android.App.Application.Context.GetSystemService(Android.Content.Context.CameraService) as Android.Hardware.Camera2.CameraManager;
+                        if (mgr == null) return Task.FromResult<IReadOnlyList<CameraInfo>>(Array.Empty<CameraInfo>());
+                        var ids = mgr.GetCameraIdList();
+                        var list = new List<CameraInfo>(ids.Length);
+                        foreach (var id in ids)
+                        {
+                                try
+                                {
+                                        var chars = mgr.GetCameraCharacteristics(id);
+                                        var lens = chars.Get(Android.Hardware.Camera2.CameraCharacteristics.LensFacing) as Java.Lang.Integer;
+                                        var facing = lens == null ? -1 : lens.IntValue();
+                                        string name;
+                                        if (facing == -1)
+                                                name = id;
+                                        else if (facing == (int)Android.Hardware.Camera2.LensFacing.Front)
+                                                name = $"Front ({id})";
+                                        else
+                                                name = $"Back ({id})";
+                                        var info = _cache.GetOrAdd(id, _ => new CameraInfo(id, name));
+                                        list.Add(info);
+                                }
+                                catch { }
+                        }
+                        return Task.FromResult<IReadOnlyList<CameraInfo>>(list);
+                }
+                catch { return Task.FromResult<IReadOnlyList<CameraInfo>>(Array.Empty<CameraInfo>()); }
 #elif IOS || MACCATALYST
                 // TODO: Implement iOS/MacCatalyst enumeration using AVCaptureDevice.DevicesWithMediaType.
                 return Task.FromResult<IReadOnlyList<CameraInfo>>(Array.Empty<CameraInfo>());
