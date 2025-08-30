@@ -14,6 +14,7 @@ public sealed partial class MediaStreamer : IAsyncDisposable
     private bool isDisposed;
 
     public event Action<bool> IsStreamingChanged = delegate { };
+    internal bool IsDisposed => isDisposed;
     public static async Task<MediaStreamer> CreateAsync(TypedEventHandler<MediaFrameReader, MediaFrameArrivedEventArgs> frameReceived, Action<MediaCaptureInitializationSettings> configureSettings)
     {
         var settings = new MediaCaptureInitializationSettings();

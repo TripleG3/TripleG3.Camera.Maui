@@ -5,7 +5,7 @@ namespace TripleG3.Camera.Maui;
 /// <summary>
 /// Cross-platform CameraManager abstraction.
 /// </summary>
-public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
+public abstract partial class CameraManager : ICameraManager
 {
     protected readonly SemaphoreSlim SyncLock = new(1, 1);
     private ImmutableList<CameraInfo> cameraInfos = [];
@@ -15,8 +15,10 @@ public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
     public event Action<ImmutableList<CameraInfo>> CameraInfosChanged = delegate { };
     public event Action<CameraInfo> SelectedCameraChanged = delegate { };
     public event Action<bool> IsStreamingChanged = delegate { };
-    public CameraInfo SelectedCamera 
-    { 
+    public event Action<CameraInfo> CameraInfoAdded = delegate { };
+    public event Action<CameraInfo> CameraInfoRemoved = delegate { };
+    public CameraInfo SelectedCamera
+    {
         get => selectedCamera;
         protected set
         {
@@ -26,8 +28,8 @@ public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
             SelectedCameraChanged.Invoke(selectedCamera);
         }
     }
-    public ImmutableList<CameraInfo> CameraInfos 
-    { 
+    public ImmutableList<CameraInfo> CameraInfos
+    {
         get => cameraInfos;
         protected set
         {
@@ -38,8 +40,8 @@ public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
             CameraInfosChanged.Invoke(cameraInfos);
         }
     }
-    public bool IsStreaming 
-    { 
+    public bool IsStreaming
+    {
         get => isStreaming;
         protected set
         {
@@ -49,6 +51,7 @@ public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
             IsStreamingChanged(isStreaming);
         }
     }
+    public bool IsDisposed { get; private set; }
 
 #if ANDROID
     public static CameraManager Create()
@@ -73,17 +76,24 @@ public abstract partial class CameraManager : ICameraManager, IAsyncDisposable
     }
 #endif
 
-    public abstract ValueTask LoadAsync(CancellationToken cancellationToken = default);
     public abstract ValueTask SelectCameraAsync(CameraInfo cameraInfo, CancellationToken cancellationToken = default);
     public abstract ValueTask StartAsync(CancellationToken cancellationToken = default);
     public abstract ValueTask StopAsync(CancellationToken cancellationToken = default);
-    public virtual async ValueTask DisposeAsync()
+    public virtual ValueTask DisposeAsync()
     {
-        try { await StopAsync(); } catch { /* ignore */ }
-        await CleanupAsync();
+        IsDisposed = true;
+        IsStreaming = false;
+        CameraInfos = [];
+        SelectedCamera = CameraInfo.Empty;
         SyncLock.Dispose();
-        GC.SuppressFinalize(this);
+        return ValueTask.CompletedTask;
     }
 
-    public abstract Task CleanupAsync();
+    protected void OnCameraInfoAdded(CameraInfo added) => CameraInfoAdded(added);
+    protected void OnCameraInfoRemoved(CameraInfo existing) => CameraInfoRemoved(existing);
+
+    ~CameraManager()
+    {
+        DisposeAsync().AsTask().Wait();
+    }
 }

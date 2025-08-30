@@ -6,12 +6,7 @@ public sealed partial class CameraView : View, IAsyncDisposable
 {
     public CameraView()
     {
-        Loaded += async (s, e) =>
-        {
-            if (CameraViewHandler != null)
-                await CameraViewHandler.LoadAsync();
-            UpdateSize();
-        };
+        Loaded += (s, e) => UpdateSize();
         SizeChanged += (s, e) => UpdateSize();
     }
 
@@ -29,7 +24,13 @@ public sealed partial class CameraView : View, IAsyncDisposable
         set => SetValue(SelectedCameraProperty, value);
     }
 
-    public ImmutableList<CameraInfo> CameraInfos => CameraViewHandler is null ? [] : CameraViewHandler.CameraInfos;
+    public static readonly BindableProperty CameraInfosProperty = BindableProperty.Create(nameof(CameraInfos), typeof(ImmutableList<CameraInfo>), typeof(CameraView), ImmutableList<CameraInfo>.Empty, defaultBindingMode: BindingMode.OneWayToSource);
+
+    public ImmutableList<CameraInfo> CameraInfos
+    {
+        get => (ImmutableList<CameraInfo>)GetValue(CameraInfosProperty);
+        internal set => SetValue(CameraInfosProperty, value);
+    }
 
     public bool IsRunning => CameraViewHandler?.IsStreaming == true;
     public Task StartAsync() => CameraViewHandler?.StartAsync() ?? Task.CompletedTask;
@@ -56,6 +57,5 @@ public interface ICameraViewHandler : IAsyncDisposable
     void OnWidthChanged(double height);
     Task StartAsync(CancellationToken cancellationToken = default);
     Task StopAsync(CancellationToken cancellationToken = default);
-    ValueTask LoadAsync(CancellationToken cancellationToken = default);
     ImmutableList<CameraInfo> CameraInfos { get; }
 }

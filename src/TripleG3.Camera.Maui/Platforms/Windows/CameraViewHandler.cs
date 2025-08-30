@@ -4,11 +4,8 @@ using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.Maui.Handlers;
 using System.Collections.Immutable;
 using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
 using Windows.Graphics.DirectX;
-using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Graphics.Imaging;
-using Windows.Media.Capture;
 using Windows.Media.Capture.Frames;
 
 namespace TripleG3.Camera.Maui;
@@ -18,7 +15,21 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
     public CameraViewHandler() : base(Mapper)
     {
         cameraManager = CameraManager.Create(FrameReceived);
+        cameraManager.CameraInfoAdded += (ci) => MainThread.BeginInvokeOnMainThread(() => VirtualView?.InvalidateMeasure());
+        cameraManager.CameraInfoRemoved += (ci) => MainThread.BeginInvokeOnMainThread(() => VirtualView?.InvalidateMeasure());
+        cameraManager.CameraInfosChanged += (cis) => MainThread.BeginInvokeOnMainThread(() => OnCameraInfosChanged(cis));
+        cameraManager.IsStreamingChanged += (isStreaming) =>
+        {
+            if (!isStreaming)
+            {
+                DrawMode = DrawMode.None;
+                MainThread.BeginInvokeOnMainThread(() => canvasControl.Invalidate());
+            }
+        };
+        cameraManager.SelectedCameraChanged += (ci) => { };
     }
+
+    private void OnCameraInfosChanged(ImmutableList<CameraInfo> cis) => VirtualView.CameraInfos = cis;
 
     private readonly CanvasControl canvasControl = new();
     private DrawMode drawMode;
@@ -60,13 +71,8 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
     }
 
     private static void MapCameraInfo(CameraViewHandler handler, CameraView view) => handler.VirtualView?.CameraViewHandler?.OnCameraInfoChanged(view.SelectedCamera);
-
-    private static void MapHeight(CameraViewHandler handler, CameraView view) =>
-        handler.VirtualView?.CameraViewHandler?.OnHeightChanged(view.Height);
-
-    private static void MapWidth(CameraViewHandler handler, CameraView view) =>
-        handler.VirtualView?.CameraViewHandler?.OnWidthChanged(view.Width);
-
+    private static void MapHeight(CameraViewHandler handler, CameraView view) => handler.VirtualView?.CameraViewHandler?.OnHeightChanged(view.Height);
+    private static void MapWidth(CameraViewHandler handler, CameraView view) => handler.VirtualView?.CameraViewHandler?.OnWidthChanged(view.Width);
     protected override CanvasControl CreatePlatformView()
     {
         canvasControl.Loaded += (_, _) => canvasControl.Invalidate();
@@ -110,7 +116,7 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
                      ? DrawMode.Direct3DSurface
                      : DrawMode.Fallback;
         }
-        canvasControl.Invalidate();
+        _ = MainThread.InvokeOnMainThreadAsync(canvasControl.Invalidate);
     }
 
     private void CanvasDrawDirect3dSurface(CanvasControl sender, CanvasDrawEventArgs args)
@@ -194,9 +200,7 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
 
     private static void DrawScaled(CanvasControl sender, CanvasDrawingSession ds, CanvasBitmap bmp)
     {
-        var scale = Math.Min(
-            sender.ActualWidth / bmp.SizeInPixels.Width,
-            sender.ActualHeight / bmp.SizeInPixels.Height);
+        var scale = Math.Min(sender.ActualWidth / bmp.SizeInPixels.Width, sender.ActualHeight / bmp.SizeInPixels.Height);
         var drawW = bmp.SizeInPixels.Width * scale;
         var drawH = bmp.SizeInPixels.Height * scale;
         var x = (sender.ActualWidth - drawW) / 2;
@@ -206,8 +210,12 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
 
     protected override async void DisconnectHandler(CanvasControl platformView)
     {
-        await cameraManager.CleanupAsync();
-        if (canvasControl != null) canvasControl.Draw -= CanvasDrawDirect3dSurface;
+        if (canvasControl != null)
+        {
+            canvasControl.Draw -= CanvasDrawDirect3dSurface;
+            canvasControl.Draw -= CanvasDrawFallback;
+            await MainThread.InvokeOnMainThreadAsync(canvasControl.Invalidate);
+        }
         base.DisconnectHandler(platformView);
     }
 
@@ -227,10 +235,14 @@ public sealed class CameraViewHandler : ViewHandler<CameraView, CanvasControl>, 
         canvasControl.Width = width;
     }
 
-    public async ValueTask LoadAsync(CancellationToken cancellationToken = default) => await cameraManager.LoadAsync(cancellationToken);
-
     public async ValueTask DisposeAsync()
     {
+        if (canvasControl != null)
+        {
+            canvasControl.Draw -= CanvasDrawDirect3dSurface;
+            canvasControl.Draw -= CanvasDrawFallback;
+            await MainThread.InvokeOnMainThreadAsync(canvasControl.Invalidate);
+        }
         DrawMode = DrawMode.None;
         await StopAsync();
         latestFrame?.Dispose();

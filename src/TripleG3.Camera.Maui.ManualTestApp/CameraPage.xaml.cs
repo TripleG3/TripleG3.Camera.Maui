@@ -7,7 +7,8 @@ public partial class CameraPage : ContentPage
         InitializeComponent();
         GpuCameraView.Loaded += (s, e) =>
         {
-            CameraPicker.ItemsSource = GpuCameraView.CameraInfos;
+            CameraPicker.SetBinding(Picker.ItemsSourceProperty, new Binding(nameof(GpuCameraView.CameraInfos), mode: BindingMode.OneWay, source: GpuCameraView));
+            //CameraPicker.ItemsSource = GpuCameraView.CameraInfos;
             if (GpuCameraView.CameraInfos.Count > 0)
             {
                 CameraPicker.SelectedItem = GpuCameraView.CameraInfos[0];
