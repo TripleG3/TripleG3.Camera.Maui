@@ -109,6 +109,8 @@ public sealed class WindowsCameraManager : CameraManager
             Panel.Back => CameraFacing.Back,
             _ => CameraFacing.Unknown
         });
+        if (CameraInfos.Any(c => c.Id == cameraInfo.Id))
+            return;
         CameraInfos = CameraInfos.Add(cameraInfo);
         OnCameraInfoAdded(cameraInfo);
         if (SelectedCamera == CameraInfo.Empty)
