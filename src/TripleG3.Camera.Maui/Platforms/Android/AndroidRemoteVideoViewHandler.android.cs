@@ -7,7 +7,7 @@ namespace TripleG3.Camera.Maui;
 
 public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView, TextureView>, IRemoteVideoViewHandler
 {
-    public static IPropertyMapper<RemoteVideoView, AndroidRemoteVideoViewHandler> Mapper = new(ViewHandler.ViewMapper);
+    public static readonly PropertyMapper<RemoteVideoView, AndroidRemoteVideoViewHandler> Mapper = new(ViewHandler.ViewMapper);
     byte[]? _latest;
     int _w, _h;
     readonly object _gate = new();
@@ -48,7 +48,7 @@ public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
         var tv = _view; if (tv == null || !tv.IsAvailable) return;
         byte[]? local; int w, h; lock (_gate) { local = _latest; w = _w; h = _h; }
         if (local == null || w == 0 || h == 0) return;
-        var bmp = Bitmap.CreateBitmap(w, h, Bitmap.Config.Argb8888);
+    var bmp = Bitmap.CreateBitmap(w, h, Bitmap.Config.Argb8888!);
         // Copy BGRA -> ARGB
         var pixels = new int[w * h];
         for (int i = 0, p = 0; i < local.Length; i += 4, p++)
@@ -60,7 +60,7 @@ public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
         var canvas = tv.LockCanvas();
         if (canvas != null)
         {
-            canvas.DrawBitmap(bmp, null, new Rect(0, 0, tv.Width, tv.Height), null);
+            canvas.DrawBitmap(bmp, null, new Android.Graphics.Rect(0, 0, tv.Width, tv.Height), null);
             tv.UnlockCanvasAndPost(canvas);
         }
         bmp.Dispose();
