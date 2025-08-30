@@ -25,6 +25,7 @@ public static class MauiProgram
 
     // Services
     builder.Services.AddSingleton<ICameraService, CameraService>();
+    builder.Services.AddSingleton<ICameraFrameBroadcaster, CameraFrameBroadcaster>();
 
 #if DEBUG
 		builder.Logging.AddDebug();

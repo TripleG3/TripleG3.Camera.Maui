@@ -14,7 +14,7 @@ using Microsoft.UI.Dispatching;
 
 namespace TripleG3.Camera.Maui;
 
-public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasControl>, INewCameraViewHandler
+public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasControl>, INewCameraViewHandler
 {
     public static IPropertyMapper<CameraView, WindowsCameraViewHandler> Mapper =
         new PropertyMapper<CameraView, WindowsCameraViewHandler>(ViewHandler.ViewMapper)
@@ -176,6 +176,16 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
             if (surface == null) return;
             lock (_surfaceLock)
                 _latestSurface = surface;
+            // Extract BGRA frame for broadcast (copy small region only when subscribers exist later optimization)
+            if (surface != null)
+            {
+                try
+                {
+                    using var sb = await SoftwareBitmap.CreateCopyFromSurfaceAsync(surface, BitmapAlphaMode.Premultiplied).AsTask().ConfigureAwait(false);
+                    BroadcastSoftwareBitmap(sb);
+                }
+                catch { }
+            }
         }
         else
         {
@@ -218,6 +228,7 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
                     _fbWidth = w;
                     _fbHeight = h;
                 }
+                BroadcastPixelBuffer(_pixelBuffer, w, h);
             }
             catch (Exception ex)
             {
@@ -374,6 +385,41 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
             }
         }
         catch { /* swallow during shutdown */ }
+    }
+}
+
+partial class WindowsCameraViewHandler
+{
+    static readonly byte[] _scratchHeader = Array.Empty<byte>();
+    void BroadcastSoftwareBitmap(SoftwareBitmap sb)
+    {
+        if (VirtualView?.Handler?.MauiContext == null) return;
+        var broadcaster = VirtualView.Handler.MauiContext.Services.GetService(typeof(ICameraFrameBroadcaster)) as ICameraFrameBroadcaster;
+        if (broadcaster == null) return;
+        if (sb.BitmapPixelFormat != BitmapPixelFormat.Bgra8)
+            return; // ensure BGRA8
+        int w = sb.PixelWidth;
+        int h = sb.PixelHeight;
+        byte[] data = new byte[w * h * 4];
+        try
+        {
+            sb.CopyToBuffer(data.AsBuffer());
+            var frame = new CameraFrame(CameraPixelFormat.BGRA32, w, h, DateTime.UtcNow.Ticks, _isMirrored, data);
+            broadcaster.Submit(frame);
+        }
+        catch { }
+    }
+
+    void BroadcastPixelBuffer(byte[] buffer, int w, int h)
+    {
+        if (VirtualView?.Handler?.MauiContext == null) return;
+        var broadcaster = VirtualView.Handler.MauiContext.Services.GetService(typeof(ICameraFrameBroadcaster)) as ICameraFrameBroadcaster;
+        if (broadcaster == null) return;
+        // buffer is BGRA in fallback path after conversion
+        var copy = new byte[w * h * 4];
+        Buffer.BlockCopy(buffer, 0, copy, 0, copy.Length);
+        var frame = new CameraFrame(CameraPixelFormat.BGRA32, w, h, DateTime.UtcNow.Ticks, _isMirrored, copy);
+        broadcaster.Submit(frame);
     }
 }
 #endif
