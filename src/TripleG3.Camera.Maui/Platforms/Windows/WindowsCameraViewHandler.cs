@@ -20,7 +20,8 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
         {
             [nameof(CameraView.CameraId)] = MapCameraId,
             [nameof(CameraView.Height)] = MapHeight,
-            [nameof(CameraView.Width)] = MapWidth
+            [nameof(CameraView.Width)] = MapWidth,
+            [nameof(CameraView.IsMirrored)] = MapIsMirrored
         };
 
     public WindowsCameraViewHandler() : base(Mapper) { }
@@ -34,6 +35,9 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
     static void MapWidth(WindowsCameraViewHandler handler, CameraView view) =>
         handler.VirtualView?.NewCameraViewHandler?.OnWidthChanged(view.Height);
 
+     static void MapIsMirrored(WindowsCameraViewHandler handler, CameraView view) =>
+         handler.VirtualView?.NewCameraViewHandler?.OnMirrorChanged(view.IsMirrored);
+
     CanvasControl? _canvas;
     MediaCapture? _mediaCapture;
     MediaFrameReader? _reader;
@@ -41,6 +45,7 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
     readonly object _surfaceLock = new();
     string? _cameraId;
     bool _started;
+    bool _isMirrored;
 
     // Fallback (when BGRA8 surface not provided)
     bool _fallbackConversion;
@@ -233,7 +238,7 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
                     local = _pixelBuffer;
                 }
                 using var bmp = CanvasBitmap.CreateFromBytes(sender, local, w, h, DirectXPixelFormat.B8G8R8A8UIntNormalized);
-                DrawScaled(sender, args.DrawingSession, bmp);
+                DrawScaled(sender, args.DrawingSession, bmp, _isMirrored);
             }
             else
             {
@@ -245,7 +250,7 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
                     return;
                 }
                 using var bmp = CanvasBitmap.CreateFromDirect3D11Surface(sender.Device, surface);
-                DrawScaled(sender, args.DrawingSession, bmp);
+                DrawScaled(sender, args.DrawingSession, bmp, _isMirrored);
             }
         }
         catch (Exception ex)
@@ -254,7 +259,7 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
         }
     }
 
-    static void DrawScaled(CanvasControl sender, CanvasDrawingSession ds, CanvasBitmap bmp)
+    static void DrawScaled(CanvasControl sender, CanvasDrawingSession ds, CanvasBitmap bmp, bool mirrored)
     {
         var scale = Math.Min(
             sender.ActualWidth / bmp.SizeInPixels.Width,
@@ -263,7 +268,19 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
         var drawH = bmp.SizeInPixels.Height * scale;
         var x = (sender.ActualWidth - drawW) / 2;
         var y = (sender.ActualHeight - drawH) / 2;
-        ds.DrawImage(bmp, new System.Numerics.Vector2((float)x, (float)y));
+        if (!mirrored)
+        {
+            ds.DrawImage(bmp, new System.Numerics.Vector2((float)x, (float)y));
+        }
+        else
+        {
+            var centerX = (float)(x + drawW / 2);
+            var centerY = (float)(y + drawH / 2);
+            var prev = ds.Transform;
+            ds.Transform = System.Numerics.Matrix3x2.CreateScale(-1, 1, new System.Numerics.Vector2(centerX, centerY));
+            ds.DrawImage(bmp, new System.Numerics.Vector2((float)x, (float)y));
+            ds.Transform = prev;
+        }
     }
 
     async Task CleanupAsync()
@@ -312,5 +329,11 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
 
         _canvas.Width = width;
     }
+
+     public void OnMirrorChanged(bool isMirrored)
+     {
+         _isMirrored = isMirrored;
+         _ = MainThread.InvokeOnMainThreadAsync(() => _canvas?.Invalidate());
+     }
 }
 #endif

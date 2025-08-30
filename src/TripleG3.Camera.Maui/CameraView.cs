@@ -18,10 +18,19 @@ public sealed class CameraView : View, IAsyncDisposable
     public static readonly BindableProperty CameraIdProperty =
         BindableProperty.Create(nameof(CameraId), typeof(string), typeof(CameraView), null, propertyChanged: OnCameraIdChanged);
 
+    public static readonly BindableProperty IsMirroredProperty =
+        BindableProperty.Create(nameof(IsMirrored), typeof(bool), typeof(CameraView), true, propertyChanged: OnIsMirroredChanged);
+
     public string? CameraId
     {
         get => (string?)GetValue(CameraIdProperty);
         set => SetValue(CameraIdProperty, value);
+    }
+
+    public bool IsMirrored
+    {
+        get => (bool)GetValue(IsMirroredProperty);
+        set => SetValue(IsMirroredProperty, value);
     }
 
     internal INewCameraViewHandler? NewCameraViewHandler { get; set; }
@@ -29,6 +38,9 @@ public sealed class CameraView : View, IAsyncDisposable
 
     static void OnCameraIdChanged(BindableObject bindable, object? oldValue, object? newValue) =>
         ((CameraView)bindable).NewCameraViewHandler?.OnCameraIdChanged((string?)newValue);
+
+    static void OnIsMirroredChanged(BindableObject bindable, object? oldValue, object? newValue) =>
+        ((CameraView)bindable).NewCameraViewHandler?.OnMirrorChanged((bool)(newValue ?? false));
 
     public Task StartAsync() => NewCameraViewHandler?.StartAsync() ?? Task.CompletedTask;
     public Task StopAsync()  => NewCameraViewHandler?.StopAsync()  ?? Task.CompletedTask;
@@ -46,6 +58,7 @@ public interface INewCameraViewHandler : IAsyncDisposable
     void OnCameraIdChanged(string? cameraId);
     void OnHeightChanged(double height);
     void OnWidthChanged(double height);
+    void OnMirrorChanged(bool isMirrored);
     Task StartAsync();
     Task StopAsync();
 }
