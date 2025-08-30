@@ -5,6 +5,9 @@ public partial class CameraPage : ContentPage
     ICameraService? _cameraService;
     IReadOnlyList<CameraInfo>? _cameras;
     bool _initialized;
+    ICameraFrameBroadcaster? _broadcaster;
+    IRemoteFrameDistributor? _remoteDist;
+    Guid _localSubscription;
 
     public CameraPage()
     {
@@ -19,6 +22,8 @@ public partial class CameraPage : ContentPage
         try
         {
             _cameraService ??= ServiceHelper.GetRequiredService<ICameraService>();
+            _broadcaster ??= ServiceHelper.GetRequiredService<ICameraFrameBroadcaster>();
+            _remoteDist ??= ServiceHelper.GetRequiredService<IRemoteFrameDistributor>();
             _cameras = await _cameraService.GetCamerasAsync();
             // Picker expects IList; ensure concrete list
             CameraPicker.ItemsSource = _cameras is List<CameraInfo> list ? list : _cameras.ToList();
@@ -35,6 +40,17 @@ public partial class CameraPage : ContentPage
         {
             await DisplayAlert("Cameras", "Failed to enumerate cameras: " + ex.Message, "OK");
         }
+    }
+
+    void EnsureLocalSubscription()
+    {
+        if (_broadcaster == null || _remoteDist == null) return;
+        if (_localSubscription != Guid.Empty) return;
+        _localSubscription = _broadcaster.Subscribe(frame =>
+        {
+            // In real scenario, serialize + send over network. For now, loopback to remote distributor if host/port set.
+            MainThread.BeginInvokeOnMainThread(() => _remoteDist.Push(frame));
+        });
     }
 
     private async void CameraPicker_SelectedIndexChanged(object sender, EventArgs e)
@@ -58,12 +74,23 @@ public partial class CameraPage : ContentPage
     private async void OnStartClicked(object sender, EventArgs e)
     {
         if (!GpuCameraView.IsRunning)
+        {
             await GpuCameraView.StartAsync();
+            EnsureLocalSubscription();
+        }
     }
 
     private async void OnStopClicked(object sender, EventArgs e)
     {
         if (GpuCameraView.IsRunning)
             await GpuCameraView.StopAsync();
+    }
+
+    private void OnConnectClicked(object sender, EventArgs e)
+    {
+        // Placeholder: would establish network connection using RemoteHostEntry.Text and RemotePortEntry.Text.
+        // For now just ensure subscription loopback is active.
+        EnsureLocalSubscription();
+        DisplayAlert("Connect", "Loopback connection active (placeholder for network).", "OK");
     }
 }

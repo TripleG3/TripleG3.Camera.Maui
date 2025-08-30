@@ -5,7 +5,7 @@
              x:Class="TripleG3.Camera.Maui.ManualTestApp.CameraPage"
              x:DataType="x:Object"
              Title="Camera Preview">
-    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*">
+    <Grid RowDefinitions="Auto,*" ColumnDefinitions="*,*">
         <VerticalStackLayout Spacing="8" Padding="12" Grid.Row="0">
             <HorizontalStackLayout Spacing="12">
         <Picker x:Name="CameraPicker" Title="Select Camera" WidthRequest="220" SelectedIndexChanged="CameraPicker_SelectedIndexChanged"
@@ -14,8 +14,14 @@
                 <Button Text="Start" Clicked="OnStartClicked" />
                 <Button Text="Stop" Clicked="OnStopClicked" />
             </HorizontalStackLayout>
+            <HorizontalStackLayout Spacing="8">
+                <Entry x:Name="RemoteHostEntry" Placeholder="Remote Host" WidthRequest="200" />
+                <Entry x:Name="RemotePortEntry" Placeholder="Port" Keyboard="Numeric" WidthRequest="80" />
+                <Button Text="Connect" Clicked="OnConnectClicked" />
+            </HorizontalStackLayout>
             <!--<Label FontSize="12" Text="Modes include new GPU view below (NewCameraView)." />-->
         </VerticalStackLayout>
-        <cam:CameraView x:Name="GpuCameraView" Grid.Row="1" HorizontalOptions="Fill" VerticalOptions="Fill"/>
+        <cam:CameraView x:Name="GpuCameraView" Grid.Row="1" Grid.Column="0" HorizontalOptions="Fill" VerticalOptions="Fill"/>
+        <cam:RemoteVideoView x:Name="RemoteView" Grid.Row="1" Grid.Column="1" BackgroundColor="Black" />
     </Grid>
 </ContentPage>

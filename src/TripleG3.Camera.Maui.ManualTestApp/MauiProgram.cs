@@ -18,14 +18,17 @@ public static class MauiProgram
             {
 #if WINDOWS
                 h.AddHandler<CameraView, WindowsCameraViewHandler>();
+                h.AddHandler<RemoteVideoView, WindowsRemoteVideoViewHandler>();
 #elif ANDROID
                 h.AddHandler<CameraView, AndroidCameraViewHandler>();
+                h.AddHandler<RemoteVideoView, AndroidRemoteVideoViewHandler>();
 #endif
             });
 
     // Services
     builder.Services.AddSingleton<ICameraService, CameraService>();
     builder.Services.AddSingleton<ICameraFrameBroadcaster, CameraFrameBroadcaster>();
+    builder.Services.AddSingleton<IRemoteFrameDistributor, RemoteFrameDistributor>();
 
 #if DEBUG
 		builder.Logging.AddDebug();
