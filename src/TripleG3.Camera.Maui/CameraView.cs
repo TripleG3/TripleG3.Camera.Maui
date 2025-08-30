@@ -2,6 +2,7 @@ namespace TripleG3.Camera.Maui; // CHANGED from .Controls
 
 public sealed class CameraView : View, IAsyncDisposable
 {
+    internal bool RequestedStart { get; private set; }
     public CameraView()
     {
         Loaded += (s, e) =>
@@ -42,7 +43,17 @@ public sealed class CameraView : View, IAsyncDisposable
     static void OnIsMirroredChanged(BindableObject bindable, object? oldValue, object? newValue) =>
         ((CameraView)bindable).NewCameraViewHandler?.OnMirrorChanged((bool)(newValue ?? false));
 
-    public Task StartAsync() => NewCameraViewHandler?.StartAsync() ?? Task.CompletedTask;
+    public Task StartAsync()
+    {
+        if (NewCameraViewHandler is null)
+        {
+            // Defer until handler is created
+            RequestedStart = true;
+            return Task.CompletedTask;
+        }
+        RequestedStart = false;
+        return NewCameraViewHandler.StartAsync();
+    }
     public Task StopAsync()  => NewCameraViewHandler?.StopAsync()  ?? Task.CompletedTask;
 
     public async ValueTask DisposeAsync()

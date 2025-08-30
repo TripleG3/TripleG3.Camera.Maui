@@ -10,6 +10,7 @@ using Windows.Graphics.Imaging;
 using Windows.Graphics.DirectX;
 using Windows.Media.MediaProperties;
 using System.Runtime.InteropServices.WindowsRuntime;
+using Microsoft.UI.Dispatching;
 
 namespace TripleG3.Camera.Maui;
 
@@ -46,6 +47,8 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
     string? _cameraId;
     bool _started;
     bool _isMirrored;
+    bool _disposing; // only true during final app disposal; not for normal stop/switch
+    DispatcherQueue? _dispatcherQueue;
 
     // Fallback (when BGRA8 surface not provided)
     bool _fallbackConversion;
@@ -58,7 +61,14 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
         _canvas = new CanvasControl();
         _canvas.Draw += Canvas_Draw;
         _canvas.Loaded += (_, _) => _canvas.Invalidate();
+    _dispatcherQueue = _canvas.DispatcherQueue;
         VirtualView.NewCameraViewHandler = this;
+    CameraLifecycleManager.Register(this);
+        // If a start was requested before handler creation, honor it now
+        if (VirtualView.RequestedStart && !_started)
+        {
+            _ = StartAsync();
+        }
         return _canvas;
     }
 
@@ -74,6 +84,7 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
     public async Task StartAsync()
     {
         if (_started) return;
+        _disposing = false; // allow invalidations again after a normal restart
         if (string.IsNullOrWhiteSpace(_cameraId))
             _cameraId = await PickFirstCameraAsync();
         await InitializeCaptureAsync();
@@ -84,8 +95,8 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
     {
         if (!_started) return;
         _started = false;
-        await CleanupAsync();
-        _ = MainThread.InvokeOnMainThreadAsync(() => _canvas?.Invalidate());
+        await CleanupAsync(final: false);
+    InvalidateOnUI();
     }
 
     async Task RestartAsync()
@@ -218,8 +229,8 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
             }
         }
 
-        // Marshal invalidate to UI thread
-        _ = MainThread.InvokeOnMainThreadAsync(() => _canvas?.Invalidate());
+    // Marshal invalidate to UI thread (guard for shutdown)
+    InvalidateOnUI();
     }
 
     void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
@@ -283,8 +294,10 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
         }
     }
 
-    async Task CleanupAsync()
+    async Task CleanupAsync(bool final)
     {
+        if (final)
+            _disposing = true;
         if (_reader != null)
         {
             try { await _reader.StopAsync(); } catch { }
@@ -303,14 +316,16 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
 
     protected override void DisconnectHandler(CanvasControl platformView)
     {
-        _ = CleanupAsync();
+    _ = CleanupAsync(final: true);
         if (_canvas != null) _canvas.Draw -= Canvas_Draw;
+    CameraLifecycleManager.Unregister(this);
         base.DisconnectHandler(platformView);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await CleanupAsync();
+    await CleanupAsync(final: true);
+    CameraLifecycleManager.Unregister(this);
         GC.SuppressFinalize(this);
     }
 
@@ -333,7 +348,32 @@ public sealed class WindowsCameraViewHandler : ViewHandler<CameraView, CanvasCon
      public void OnMirrorChanged(bool isMirrored)
      {
          _isMirrored = isMirrored;
-         _ = MainThread.InvokeOnMainThreadAsync(() => _canvas?.Invalidate());
+        InvalidateOnUI();
      }
+
+    void InvalidateOnUI()
+    {
+        if (_disposing) return;
+        try
+        {
+            var canvas = _canvas;
+            if (canvas == null) return;
+            if (MainThread.IsMainThread)
+            {
+                canvas.Invalidate();
+                return;
+            }
+            if (_dispatcherQueue != null)
+            {
+                _ = _dispatcherQueue.TryEnqueue(() => canvas.Invalidate());
+            }
+            else
+            {
+                // As a last resort; may throw if main thread gone, swallow
+                _ = MainThread.InvokeOnMainThreadAsync(() => canvas.Invalidate());
+            }
+        }
+        catch { /* swallow during shutdown */ }
+    }
 }
 #endif
