@@ -24,6 +24,8 @@ public interface IRemoteVideoMiddleware
 public sealed class RemoteVideoView : View, IDisposable
 {
     internal IRemoteVideoViewHandler? HandlerImpl { get; set; }
+    // For headless integration tests we bypass dispatcher marshalling.
+    internal static bool DisableDispatcherForTests { get; set; }
 
     public static readonly BindableProperty IpAddressProperty = BindableProperty.Create(
         nameof(IpAddress), typeof(string), typeof(RemoteVideoView), default(string), propertyChanged: OnEndpointChanged);
@@ -77,10 +79,18 @@ public sealed class RemoteVideoView : View, IDisposable
     {
         try
         {
-            if (Dispatcher.IsDispatchRequired)
-                Dispatcher.Dispatch(() => HandlerImpl?.UpdateFrame(frame));
-            else
+            if (DisableDispatcherForTests || Dispatcher is null)
+            {
                 HandlerImpl?.UpdateFrame(frame);
+            }
+            else if (Dispatcher.IsDispatchRequired)
+            {
+                Dispatcher.Dispatch(() => HandlerImpl?.UpdateFrame(frame));
+            }
+            else
+            {
+                HandlerImpl?.UpdateFrame(frame);
+            }
         }
         catch { }
     }
@@ -210,8 +220,15 @@ public sealed class RemoteVideoView : View, IDisposable
             if (frame.HasValue)
             {
                 var f = frame.Value;
-                // Ensure UI thread update
-                Dispatcher.Dispatch(() => HandlerImpl?.UpdateFrame(f));
+                if (DisableDispatcherForTests || Dispatcher is null)
+                {
+                    HandlerImpl?.UpdateFrame(f);
+                }
+                else
+                {
+                    // Ensure UI thread update
+                    Dispatcher.Dispatch(() => HandlerImpl?.UpdateFrame(f));
+                }
             }
         }
         catch { }
