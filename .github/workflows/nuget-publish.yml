@@ -33,15 +33,17 @@ jobs:
         run: |
           # Base version from date + short sha to ensure uniqueness for each commit
           $ErrorActionPreference = 'Stop'
-          $date = Get-Date -Format 'yyyy.MM.dd'
+          # Use yyyymmdd (no dots) to form valid numeric prerelease identifiers (no leading zero segments like '08')
+          $date = Get-Date -Format 'yyyyMMdd'
           $sha = (git rev-parse --short HEAD)
-          $base = "$date-$sha"
+          $base = "ci.$date.$sha"
           # Allow overriding via tag 'v*'
           $tag = ''
           try { $tag = git describe --tags --exact-match 2>$null } catch { $tag = '' }
           if ($tag -and $tag -match '^v([0-9]+\.[0-9]+\.[0-9]+.*)$') {
             $version = $tag.TrimStart('v')
           } else {
+            # Resulting prerelease version: 0.0.0-ci.yyyymmdd.sha (SemVer2 & NuGet-valid)
             $version = "0.0.0-$base"
           }
           echo "Computed version: $version"
