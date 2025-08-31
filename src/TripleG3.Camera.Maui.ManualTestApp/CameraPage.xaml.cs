@@ -37,7 +37,7 @@ public partial class CameraPage : ContentPage
             _remoteDist ??= ServiceHelper.GetRequiredService<IRemoteFrameDistributor>();
             _cameras = await _cameraService.GetCamerasAsync();
             // Picker expects IList; ensure concrete list
-            CameraPicker.ItemsSource = _cameras is List<CameraInfo> list ? list : _cameras.ToList();
+            CameraPicker.ItemsSource = _cameras is List<CameraInfo> list ? list : [.. _cameras];
             if (_cameras.Count > 0)
             {
                 CameraPicker.SelectedIndex = 0;

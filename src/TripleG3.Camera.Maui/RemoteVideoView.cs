@@ -32,7 +32,7 @@ internal sealed class RemoteFrameDistributor : IRemoteFrameDistributor
     public void Push(CameraFrame frame)
     {
         Action<CameraFrame>[] sinks;
-        lock (_gate) sinks = _sinks.ToArray();
+        lock (_gate) sinks = [.. _sinks];
         foreach (var s in sinks)
         {
             try { s(frame); } catch { }
