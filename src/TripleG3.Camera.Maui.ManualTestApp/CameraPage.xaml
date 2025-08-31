@@ -29,6 +29,15 @@
                        Placeholder="Port"
                        Keyboard="Numeric"
                        WidthRequest="70"/>
+                <Picker x:Name="ProtocolPicker"
+                        WidthRequest="90"
+                        Title="Proto"
+                        SelectedIndex="0">
+                    <Picker.Items>
+                        <x:String>UDP</x:String>
+                        <x:String>TCP</x:String>
+                    </Picker.Items>
+                </Picker>
                 <Button Text="Connect"
                         Clicked="OnConnectClicked"/>
                 <Label Text="Feed:"

@@ -160,10 +160,15 @@ public partial class CameraPage : ContentPage
 
     private void OnConnectClicked(object sender, EventArgs e)
     {
-        // Placeholder: would establish network connection using RemoteHostEntry.Text and RemotePortEntry.Text.
-        // For now just ensure subscription loopback is active.
+        // Apply entered network endpoint to RemoteVideoView; it will auto (re)start its receiver.
+        RemoteView.IpAddress = RemoteHostEntry.Text;
+        if (int.TryParse(RemotePortEntry.Text, out var port))
+            RemoteView.Port = port;
+        if (ProtocolPicker.SelectedIndex >= 0)
+            RemoteView.Protocol = (RemoteVideoProtocol)ProtocolPicker.SelectedIndex; // enum order matches picker items
+        // Optional: keep local subscription active so user can still view local feed when switching modes.
         EnsureLocalSubscription();
-        DisplayAlert("Connect", "Loopback connection active (placeholder for network).", "OK");
+        DisplayAlert("Remote", $"Configured {RemoteView.Protocol} {RemoteView.IpAddress}:{RemoteView.Port}", "OK");
     }
 
     private void FeedModePicker_SelectedIndexChanged(object sender, EventArgs e)
