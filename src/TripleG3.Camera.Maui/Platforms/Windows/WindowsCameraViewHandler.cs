@@ -283,7 +283,8 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
 
     static void DrawScaled(CanvasControl sender, CanvasDrawingSession ds, CanvasBitmap bmp, bool mirrored)
     {
-        var scale = Math.Min(
+        // Aspect fill (crop), not fit
+        var scale = Math.Max(
             sender.ActualWidth / bmp.SizeInPixels.Width,
             sender.ActualHeight / bmp.SizeInPixels.Height);
         var drawW = bmp.SizeInPixels.Width * scale;
@@ -340,21 +341,9 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
         GC.SuppressFinalize(this);
     }
 
-    public void OnHeightChanged(double height)
-    {
-        if (_canvas == null || height < 1)
-            return;
+    public void OnHeightChanged(double height) { }
 
-        _canvas.Height = height;
-    }
-
-    public void OnWidthChanged(double width)
-    {
-        if (_canvas == null || width < 1)
-            return;
-
-        _canvas.Width = width;
-    }
+    public void OnWidthChanged(double width) { }
 
      public void OnMirrorChanged(bool isMirrored)
      {

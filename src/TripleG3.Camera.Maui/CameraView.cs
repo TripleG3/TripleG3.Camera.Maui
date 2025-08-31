@@ -54,7 +54,7 @@ public sealed class CameraView : View, IAsyncDisposable
         RequestedStart = false;
         return NewCameraViewHandler.StartAsync();
     }
-    public Task StopAsync()  => NewCameraViewHandler?.StopAsync()  ?? Task.CompletedTask;
+    public Task StopAsync() => NewCameraViewHandler?.StopAsync() ?? Task.CompletedTask;
 
     public async ValueTask DisposeAsync()
     {

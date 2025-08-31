@@ -155,6 +155,8 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
             req.AddTarget(surface);
             req.Set(CaptureRequest.ControlMode!, (int)ControlMode.Auto);
             _session.SetRepeatingRequest(req.Build(), null, null);
+            // Attempt aspect fill once preview sizes known (use texture size fallback)
+            ApplyAspectFill(_texture?.Width ?? 0, _texture?.Height ?? 0);
         }
         catch { }
     }
@@ -162,6 +164,23 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
     public void OnHeightChanged(double height) { /* no-op */ }
     public void OnWidthChanged(double width) { /* no-op */ }
     public void OnMirrorChanged(bool isMirrored) { _isMirrored = isMirrored; if (_texture != null) _texture.ScaleX = isMirrored ? -1f : 1f; }
+
+    void ApplyAspectFill(int frameW, int frameH)
+    {
+        var tv = _texture; if (tv == null) return;
+        if (tv.Width == 0 || tv.Height == 0 || frameW == 0 || frameH == 0) return;
+        float viewW = tv.Width;
+        float viewH = tv.Height;
+        float scale = Math.Max(viewW / frameW, viewH / frameH);
+        float scaledW = frameW * scale;
+        float scaledH = frameH * scale;
+        float dx = (viewW - scaledW) / 2f;
+        float dy = (viewH - scaledH) / 2f;
+        var matrix = new Android.Graphics.Matrix();
+        matrix.PostScale(scale, scale, 0, 0);
+        matrix.PostTranslate(dx, dy);
+        tv.SetTransform(matrix);
+    }
 
     // Helper inner classes
     class SimpleTextureListener : Java.Lang.Object, TextureView.ISurfaceTextureListener

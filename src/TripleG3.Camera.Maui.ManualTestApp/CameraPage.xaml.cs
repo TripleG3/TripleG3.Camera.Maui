@@ -46,6 +46,14 @@ public partial class CameraPage : ContentPage
                 if (!GpuCameraView.IsRunning)
                     await GpuCameraView.StartAsync();
             }
+
+            // Ensure initial picker selections are applied (defaults set in XAML)
+            if (FeedModePicker.SelectedIndex < 0) FeedModePicker.SelectedIndex = 0; // Live
+            if (ViewModePicker.SelectedIndex < 0) ViewModePicker.SelectedIndex = 0; // Local
+            FeedStatusLabel.Text = "Live";
+            _showBuffered = false;
+            ViewModePicker_SelectedIndexChanged(ViewModePicker, EventArgs.Empty);
+            FeedModePicker_SelectedIndexChanged(FeedModePicker, EventArgs.Empty);
         }
         catch (Exception ex)
         {
@@ -55,7 +63,7 @@ public partial class CameraPage : ContentPage
 
     void EnsureLocalSubscription()
     {
-    if (_broadcaster == null || _remoteDist == null) return;
+        if (_broadcaster == null || _remoteDist == null) return;
         if (_liveSubscription == Guid.Empty)
         {
             _liveSubscription = _broadcaster.Subscribe(frame =>
@@ -154,8 +162,8 @@ public partial class CameraPage : ContentPage
     {
         // Placeholder: would establish network connection using RemoteHostEntry.Text and RemotePortEntry.Text.
         // For now just ensure subscription loopback is active.
-    EnsureLocalSubscription();
-    DisplayAlert("Connect", "Loopback connection active (placeholder for network).", "OK");
+        EnsureLocalSubscription();
+        DisplayAlert("Connect", "Loopback connection active (placeholder for network).", "OK");
     }
 
     private void FeedModePicker_SelectedIndexChanged(object sender, EventArgs e)
