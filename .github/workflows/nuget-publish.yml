@@ -36,23 +36,28 @@ jobs:
           $sha = (git rev-parse --short HEAD)
           $base = "$date-$sha"
           # Allow overriding via tag 'v*'
-          $tag = (git describe --tags --exact-match 2>$null)
-          if ($LASTEXITCODE -eq 0 -and $tag -match '^v([0-9]+\.[0-9]+\.[0-9]+.*)$') {
+          $tag = git describe --tags --exact-match 2>$null
+          if ($? -and $tag -match '^v([0-9]+\.[0-9]+\.[0-9]+.*)$') {
             $version = $tag.TrimStart('v')
           } else {
             $version = "0.0.0-$base"
           }
           echo "Computed version: $version"
-          echo "version=$version" >> $GITHUB_OUTPUT
+          # Write GitHub output (must use $env:GITHUB_OUTPUT in PowerShell)
+          if (-not $env:GITHUB_OUTPUT) { throw 'GITHUB_OUTPUT env var not set.' }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Pack
-        run: dotnet pack $env:PROJECT_PATH -c Release -p:PackageVersion=${{ steps.version.outputs.version }} --no-build --include-symbols
+        run: |
+          if (-not '${{ steps.version.outputs.version }}') { throw 'Version output missing.' }
+          dotnet pack $env:PROJECT_PATH -c Release -p:PackageVersion='${{ steps.version.outputs.version }}' --no-build --include-symbols
 
       - name: Publish (NuGet)
         if: success()
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
+          if (-not '${{ steps.version.outputs.version }}') { throw 'Version output missing (pre-publish).' }
           $nupkg = Get-ChildItem -Recurse -Filter *.nupkg | Where-Object { $_.FullName -notmatch '\.snupkg$' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $nupkg) { throw 'No nupkg produced.' }
           if (-not $env:NUGET_API_KEY) { throw 'NUGET_API_KEY secret not set.' }
