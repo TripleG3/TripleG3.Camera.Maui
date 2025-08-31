@@ -119,7 +119,7 @@ public partial class CameraPage : ContentPage
                             MainThread.BeginInvokeOnMainThread(() => _bufferedDistributor.Push(frame));
                         }
                     }
-                    await Task.Delay(66); // ~15 fps playback
+                    await Task.Yield();
                 }
             });
         }
