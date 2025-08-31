@@ -222,12 +222,21 @@ public partial class CameraPage : ContentPage
 
     void OnLiveFrame(CameraFrame frame)
     {
-        // Pass to platform handler via shared global distributor also (kept for network placeholder)
+        // If user selected Remote + Live, push directly to RemoteView.
+        if (ViewModePicker.SelectedIndex == 1 && !_showBuffered)
+        {
+            RemoteView.SubmitFrame(frame);
+        }
+        // Keep distributor push for potential external subscribers / future network forwarding
         _remoteDist?.Push(frame);
     }
 
     void OnBufferedFrame(CameraFrame frame)
     {
+        if (ViewModePicker.SelectedIndex == 1 && _showBuffered && _bufferPlaying)
+        {
+            RemoteView.SubmitFrame(frame);
+        }
         _remoteDist?.Push(frame);
         if (_showBuffered && _bufferPlaying && FeedStatusLabel.Text != "Buffered")
             FeedStatusLabel.Text = "Buffered";

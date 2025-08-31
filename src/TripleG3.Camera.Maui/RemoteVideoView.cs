@@ -69,6 +69,22 @@ public sealed class RemoteVideoView : View, IDisposable
         Unloaded += (_, _) => Stop();
     }
 
+    /// <summary>
+    /// Allows manually supplying a frame (e.g., local loopback testing without network).
+    /// Does not perform any network serialization; invokes handler on UI thread.
+    /// </summary>
+    public void SubmitFrame(CameraFrame frame)
+    {
+        try
+        {
+            if (Dispatcher.IsDispatchRequired)
+                Dispatcher.Dispatch(() => HandlerImpl?.UpdateFrame(frame));
+            else
+                HandlerImpl?.UpdateFrame(frame);
+        }
+        catch { }
+    }
+
     static void OnEndpointChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
         if (bindable is RemoteVideoView v) v.RestartIfRunning();
