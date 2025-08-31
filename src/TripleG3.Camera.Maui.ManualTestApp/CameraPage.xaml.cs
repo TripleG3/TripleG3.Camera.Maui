@@ -45,6 +45,8 @@ public partial class CameraPage : ContentPage
                 // Auto-start preview on first appearance
                 if (!GpuCameraView.IsRunning)
                     await GpuCameraView.StartAsync();
+                // Ensure we subscribe to broadcaster so Remote view can show frames
+                EnsureLocalSubscription();
             }
 
             // Ensure initial picker selections are applied (defaults set in XAML)
@@ -201,6 +203,8 @@ public partial class CameraPage : ContentPage
         if (ViewModePicker.SelectedIndex == 1)
         {
             // Remote
+            // Make sure subscriptions are active so remote view can receive frames
+            EnsureLocalSubscription();
             remote.IsVisible = true;
             local.IsVisible = false;
             // Attach appropriate sink based on current mode
