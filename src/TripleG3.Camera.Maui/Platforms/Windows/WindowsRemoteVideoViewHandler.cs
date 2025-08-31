@@ -28,16 +28,16 @@ public sealed class WindowsRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
         lock (_gate) { local = _latest; w = _w; h = _h; }
         if (local == null) return;
         if (local.Length != w * h * 4) return; // expect BGRA32
-    using var bmp = CanvasBitmap.CreateFromBytes(sender, local, w, h, DirectXPixelFormat.B8G8R8A8UIntNormalized);
-    var cw = (float)sender.ActualWidth;
-    var ch = (float)sender.ActualHeight;
-    if (cw <= 0 || ch <= 0) { args.DrawingSession.DrawImage(bmp); return; }
-    float scale = Math.Min(cw / w, ch / h);
-    float dw = w * scale;
-    float dh = h * scale;
-    float dx = (cw - dw) / 2f;
-    float dy = (ch - dh) / 2f;
-    args.DrawingSession.DrawImage(bmp, new Windows.Foundation.Rect(dx, dy, dw, dh));
+        using var bmp = CanvasBitmap.CreateFromBytes(sender, local, w, h, DirectXPixelFormat.B8G8R8A8UIntNormalized);
+        var cw = (float)sender.ActualWidth;
+        var ch = (float)sender.ActualHeight;
+        if (cw <= 0 || ch <= 0) { args.DrawingSession.DrawImage(bmp); return; }
+        float scale = Math.Min(cw / w, ch / h);
+        float dw = w * scale;
+        float dh = h * scale;
+        float dx = (cw - dw) / 2f;
+        float dy = (ch - dh) / 2f;
+        args.DrawingSession.DrawImage(bmp, new Windows.Foundation.Rect(dx, dy, dw, dh));
     }
 
     public void OnSizeChanged(double w, double h) => _canvas?.Invalidate();
