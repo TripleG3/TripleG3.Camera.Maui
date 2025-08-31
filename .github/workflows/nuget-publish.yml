@@ -1,0 +1,74 @@
+name: build-and-publish-nuget
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-pack-publish:
+    runs-on: windows-latest
+    env:
+      PROJECT_PATH: src/TripleG3.Camera.Maui/TripleG3.Camera.Maui.csproj
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore $env:PROJECT_PATH
+
+      - name: Build Release (no pack)
+        run: dotnet build $env:PROJECT_PATH -c Release --no-restore
+
+      - name: Determine Version
+        id: version
+        shell: pwsh
+        run: |
+          # Base version from date + short sha to ensure uniqueness for each commit
+          $date = Get-Date -Format 'yyyy.MM.dd'
+          $sha = (git rev-parse --short HEAD)
+          $base = "$date-$sha"
+          # Allow overriding via tag 'v*'
+          $tag = (git describe --tags --exact-match 2>$null)
+          if ($LASTEXITCODE -eq 0 -and $tag -match '^v([0-9]+\.[0-9]+\.[0-9]+.*)$') {
+            $version = $tag.TrimStart('v')
+          } else {
+            $version = "0.0.0-$base"
+          }
+          echo "Computed version: $version"
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Pack
+        run: dotnet pack $env:PROJECT_PATH -c Release -p:PackageVersion=${{ steps.version.outputs.version }} --no-build --include-symbols
+
+      - name: Publish (NuGet)
+        if: success()
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          $nupkg = Get-ChildItem -Recurse -Filter *.nupkg | Where-Object { $_.FullName -notmatch '\.snupkg$' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $nupkg) { throw 'No nupkg produced.' }
+          if (-not $env:NUGET_API_KEY) { throw 'NUGET_API_KEY secret not set.' }
+          dotnet nuget push $nupkg.FullName -k $env:NUGET_API_KEY -s https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Publish Symbols (optional)
+        if: success()
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          Get-ChildItem -Recurse -Filter *.snupkg | ForEach-Object {
+            dotnet nuget push $_.FullName -k $env:NUGET_API_KEY -s https://api.nuget.org/v3/index.json --skip-duplicate
+          }
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "Version: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Publish attempted (check above for success or skips)." >> $GITHUB_STEP_SUMMARY

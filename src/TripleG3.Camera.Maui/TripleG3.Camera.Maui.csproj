@@ -11,6 +11,23 @@
 		<Nullable>enable</Nullable>
 		<WarningsAsErrors>Nullable</WarningsAsErrors>
 
+		<!-- NuGet package metadata -->
+		<PackageId>TripleG3.Camera.Maui</PackageId>
+		<Title>TripleG3.Camera.Maui</Title>
+		<Description>Cross-platform .NET MAUI camera view with frame broadcasting, live &amp; buffered preview, and remote feed scaffolding for Android, Windows, iOS &amp; Mac Catalyst.</Description>
+		<Authors>TripleG3</Authors>
+		<Company>TripleG3</Company>
+		<PackageTags>camera;maui;android;windows;ios;video;streaming;media;capture</PackageTags>
+		<RepositoryUrl>https://github.com/TripleG3/TripleG3.Camera.Maui</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageProjectUrl>https://github.com/TripleG3/TripleG3.Camera.Maui</PackageProjectUrl>
+		<PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
@@ -22,6 +39,10 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="TripleG3.P2P" Version="1.0.8" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="/" />
 	</ItemGroup>
 
 	<ItemGroup>
