@@ -7,6 +7,7 @@ public partial class CameraPage : ContentPage
     bool _initialized;
     ICameraFrameBroadcaster? _broadcaster;
     IRemoteFrameDistributor? _remoteDist;
+    Streaming.IVideoRtpSender? _rtpSender;
     // Separate distributors so Remote view shows only selected feed without overlap
     readonly RemoteFrameDistributor _liveDistributor = new();
     readonly RemoteFrameDistributor _bufferedDistributor = new();
@@ -35,6 +36,7 @@ public partial class CameraPage : ContentPage
             _cameraService ??= ServiceHelper.GetRequiredService<ICameraService>();
             _broadcaster ??= ServiceHelper.GetRequiredService<ICameraFrameBroadcaster>();
             _remoteDist ??= ServiceHelper.GetRequiredService<IRemoteFrameDistributor>();
+            try { _rtpSender = (Streaming.IVideoRtpSender?)ServiceHelper.GetRequiredService<IServiceProvider>().GetService(typeof(Streaming.IVideoRtpSender)); } catch { }
             _cameras = await _cameraService.GetCamerasAsync();
             // Picker expects IList; ensure concrete list
             CameraPicker.ItemsSource = _cameras is List<CameraInfo> list ? list : [.. _cameras];
@@ -74,6 +76,8 @@ public partial class CameraPage : ContentPage
                 {
                     MainThread.BeginInvokeOnMainThread(() => _liveDistributor.Push(frame));
                 }
+                // Also forward to RTP stub (non-blocking)
+                _rtpSender?.SubmitRawFrame(frame);
             });
         }
         if (_bufferSubscription == Guid.Empty)
