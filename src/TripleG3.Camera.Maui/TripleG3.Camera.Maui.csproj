@@ -43,7 +43,10 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-		<PackageReference Include="TripleG3.P2P" Version="1.1.15" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\TripleG3.P2P\src\TripleG3.P2P\TripleG3.P2P.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
