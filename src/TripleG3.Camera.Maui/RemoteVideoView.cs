@@ -24,6 +24,11 @@ public interface IRemoteVideoMiddleware
     byte[] Process(byte[] buffer);
 }
 
+/// <summary>
+/// View capable of rendering remote or manually fed <see cref="CameraFrame"/> instances.
+/// Use <see cref="SubmitFrame(CameraFrame)"/> for direct injection (e.g., from a P2P decoder) or
+/// configure an endpoint (IpAddress/Port/Protocol) for the built-in lightweight listeners.
+/// </summary>
 public sealed class RemoteVideoView : View, IDisposable
 {
     internal IRemoteVideoViewHandler? HandlerImpl { get; set; }
@@ -75,8 +80,8 @@ public sealed class RemoteVideoView : View, IDisposable
     }
 
     /// <summary>
-    /// Allows manually supplying a frame (e.g., local loopback testing without network).
-    /// Does not perform any network serialization; invokes handler on UI thread.
+    /// Manually supplies a frame (e.g. local loopback, external decoder pipeline).
+    /// Thread-safe; marshals to UI thread if required.
     /// </summary>
     public void SubmitFrame(CameraFrame frame)
     {
@@ -213,9 +218,6 @@ public sealed class RemoteVideoView : View, IDisposable
         return true;
     }
 
-    // For UDP we expect full serialized frame payload in a single datagram.
-    // Serialized format (little-endian):
-    // byte Format, int Width, int Height, long TimestampTicks, byte Mirrored, int DataLength, byte[DataLength] PixelData
     static byte[] BuildFrameBuffer(CameraPixelFormat format, int w, int h, long ticks, bool mirrored, byte[] pixelData)
     {
         var buf = new byte[1 + 4 + 4 + 8 + 1 + 4 + pixelData.Length];
@@ -243,15 +245,7 @@ public sealed class RemoteVideoView : View, IDisposable
             if (frame.HasValue)
             {
                 var f = frame.Value;
-                if (DisableDispatcherForTests || Dispatcher is null)
-                {
-                    HandlerImpl?.UpdateFrame(f);
-                }
-                else
-                {
-                    // Ensure UI thread update
-                    Dispatcher.Dispatch(() => HandlerImpl?.UpdateFrame(f));
-                }
+                SubmitFrame(f);
             }
         }
         catch { }
@@ -284,11 +278,6 @@ public sealed class RemoteVideoView : View, IDisposable
     }
 }
 
-/// <summary>
-/// Lightweight adapter that reflects TripleG3.P2P Video RtpVideoReceiver at runtime so we can
-/// avoid hard build breaks if its signature shifts. Access units are expected to contain the
-/// synthetic payload produced by VideoRtpSenderStub: 00 00 00 01 65 | width(int32) | height(int32) | timestampTicks(int64) | rawPixelData
-/// </summary>
 internal sealed class RtpReceiverAdapter : IDisposable
 {
     readonly object? _receiver;
@@ -307,7 +296,6 @@ internal sealed class RtpReceiverAdapter : IDisposable
             var auType = Type.GetType("TripleG3.P2P.Video.EncodedAccessUnit, " + asmName, throwOnError: false);
             if (type != null && cipherType != null && auType != null)
             {
-                // Find ctor with (ICipher, Action<EncodedAccessUnit>) or (uint ssrc, ICipher, Action<EncodedAccessUnit>)
                 var ctors = type.GetConstructors();
                 foreach (var c in ctors)
                 {
@@ -347,17 +335,14 @@ internal sealed class RtpReceiverAdapter : IDisposable
 
     Delegate BuildAUCallback(Type auType)
     {
-        // EncodedAccessUnit has: Memory<byte> Data / ReadOnlyMemory<byte>? We'll just use reflection to get buffer + timestamps.
         return Delegate.CreateDelegate(typeof(Action<>).MakeGenericType(auType), this, nameof(OnAccessUnitReflection));
     }
 
-    // Called via reflection delegate
     public void OnAccessUnitReflection(object au)
     {
         try
         {
             var auType = au.GetType();
-            // Expect property or field exposing EncodedData or Data / Buffer
             ReadOnlyMemory<byte> rom = default;
             foreach (var p in auType.GetProperties())
             {
@@ -378,7 +363,6 @@ internal sealed class RtpReceiverAdapter : IDisposable
             }
             if (rom.Length < 5 + 4 + 4 + 8) return;
             var span = rom.Span;
-            // Skip Annex B start + NAL header (5 bytes)
             int o = 5;
             int w = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(o, 4)); o += 4;
             int h = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(o, 4)); o += 4;
@@ -397,7 +381,7 @@ internal sealed class RtpReceiverAdapter : IDisposable
 
     public void Dispose()
     {
-        try { ( _receiver as IDisposable)?.Dispose(); } catch { }
+        try { (_receiver as IDisposable)?.Dispose(); } catch { }
     }
 }
 
