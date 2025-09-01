@@ -58,11 +58,11 @@
 		<PackageReference Include="Microsoft.Graphics.Win2D" Version="1.3.2" />
 	</ItemGroup>
 
-	<!-- Removed SkiaSharp dependency as it's unused -->
-
 	<ItemGroup>
-	  <ProjectReference Include="..\TripleG3.Camera.Maui\TripleG3.Camera.Maui.csproj" />
+	  <ProjectReference Include="..\..\src\TripleG3.Camera.Maui\TripleG3.Camera.Maui.csproj" />
 	</ItemGroup>
+
+	<!-- Removed SkiaSharp dependency as it's unused -->
 
 	<ItemGroup>
 	  <MauiXaml Update="CameraPage.xaml">
