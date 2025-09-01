@@ -3,13 +3,16 @@ using System.Net.Sockets;
 using System.Buffers.Binary;
 using System.Threading;
 using System.Threading.Tasks;
+using System;
+using System.Reflection;
 
 namespace TripleG3.Camera.Maui;
 
 public enum RemoteVideoProtocol
 {
     UDP,
-    TCP
+    TCP,
+    RTP // RTP over UDP using TripleG3.P2P synthetic AU format
 }
 
 public interface IRemoteVideoMiddleware
@@ -149,6 +152,26 @@ public sealed class RemoteVideoView : View, IDisposable
                     ProcessBuffer(result.Buffer);
                 }
             }
+            else if (Protocol == RemoteVideoProtocol.RTP)
+            {
+                using var udp = new UdpClient(Port);
+                var filterIp = string.IsNullOrWhiteSpace(IpAddress) ? null : IPAddress.Parse(IpAddress!);
+                using var rtp = new RtpReceiverAdapter(frame => SubmitFrame(frame));
+                while (!ct.IsCancellationRequested)
+                {
+                    var result = await udp.ReceiveAsync(ct).ConfigureAwait(false);
+                    if (filterIp != null && !result.RemoteEndPoint.Address.Equals(filterIp)) continue;
+                    // Classify RTP vs RTCP (basic heuristic: RTCP PT 200-204). We'll feed both.
+                    if (result.Buffer.Length >= 2 && (result.Buffer[0] >> 6) == 2)
+                    {
+                        var pt = (byte)(result.Buffer[1] & 0x7F);
+                        if (pt >= 200 && pt <= 204)
+                            rtp.ProcessRtcp(result.Buffer);
+                        else
+                            rtp.ProcessRtp(result.Buffer);
+                    }
+                }
+            }
             else // TCP
             {
                 if (string.IsNullOrWhiteSpace(IpAddress)) return; // need remote host for TCP
@@ -258,6 +281,123 @@ public sealed class RemoteVideoView : View, IDisposable
     {
         Stop();
         GC.SuppressFinalize(this);
+    }
+}
+
+/// <summary>
+/// Lightweight adapter that reflects TripleG3.P2P Video RtpVideoReceiver at runtime so we can
+/// avoid hard build breaks if its signature shifts. Access units are expected to contain the
+/// synthetic payload produced by VideoRtpSenderStub: 00 00 00 01 65 | width(int32) | height(int32) | timestampTicks(int64) | rawPixelData
+/// </summary>
+internal sealed class RtpReceiverAdapter : IDisposable
+{
+    readonly object? _receiver;
+    readonly Action<byte[]>? _processRtp;
+    readonly Action<byte[]>? _processRtcp;
+    readonly Action<CameraFrame> _onFrame;
+
+    public RtpReceiverAdapter(Action<CameraFrame> onFrame)
+    {
+        _onFrame = onFrame;
+        try
+        {
+            var asmName = "TripleG3.P2P"; // assembly name hosting video classes
+            var type = Type.GetType("TripleG3.P2P.Video.RtpVideoReceiver, " + asmName, throwOnError: false);
+            var cipherType = Type.GetType("TripleG3.P2P.Video.NoOpCipher, " + asmName, throwOnError: false);
+            var auType = Type.GetType("TripleG3.P2P.Video.EncodedAccessUnit, " + asmName, throwOnError: false);
+            if (type != null && cipherType != null && auType != null)
+            {
+                // Find ctor with (ICipher, Action<EncodedAccessUnit>) or (uint ssrc, ICipher, Action<EncodedAccessUnit>)
+                var ctors = type.GetConstructors();
+                foreach (var c in ctors)
+                {
+                    var ps = c.GetParameters();
+                    try
+                    {
+                        if (ps.Length == 2 && ps[1].ParameterType.Name.Contains("Action"))
+                        {
+                            var cipher = Activator.CreateInstance(cipherType);
+                            var del = BuildAUCallback(auType);
+                            _receiver = c.Invoke(new object?[] { cipher!, del });
+                            break;
+                        }
+                        else if (ps.Length == 3 && ps[2].ParameterType.Name.Contains("Action"))
+                        {
+                            var cipher = Activator.CreateInstance(cipherType);
+                            var del = BuildAUCallback(auType);
+                            _receiver = c.Invoke(new object?[] { (uint)Random.Shared.Next(), cipher!, del });
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+                if (_receiver != null)
+                {
+                    var mRtp = type.GetMethod("ProcessRtp");
+                    var mRtcp = type.GetMethod("ProcessRtcp");
+                    if (mRtp != null)
+                        _processRtp = buf => { try { mRtp.Invoke(_receiver, new object?[] { (ReadOnlyMemory<byte>)buf }); } catch { } };
+                    if (mRtcp != null)
+                        _processRtcp = buf => { try { mRtcp.Invoke(_receiver, new object?[] { (ReadOnlyMemory<byte>)buf }); } catch { } };
+                }
+            }
+        }
+        catch { }
+    }
+
+    Delegate BuildAUCallback(Type auType)
+    {
+        // EncodedAccessUnit has: Memory<byte> Data / ReadOnlyMemory<byte>? We'll just use reflection to get buffer + timestamps.
+        return Delegate.CreateDelegate(typeof(Action<>).MakeGenericType(auType), this, nameof(OnAccessUnitReflection));
+    }
+
+    // Called via reflection delegate
+    public void OnAccessUnitReflection(object au)
+    {
+        try
+        {
+            var auType = au.GetType();
+            // Expect property or field exposing EncodedData or Data / Buffer
+            ReadOnlyMemory<byte> rom = default;
+            foreach (var p in auType.GetProperties())
+            {
+                if (p.PropertyType == typeof(ReadOnlyMemory<byte>) || p.PropertyType.FullName!.Contains("ReadOnlyMemory"))
+                {
+                    try { rom = (ReadOnlyMemory<byte>)p.GetValue(au)!; if (rom.Length > 0) break; } catch { }
+                }
+            }
+            if (rom.Length == 0)
+            {
+                foreach (var f in auType.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+                {
+                    if (f.FieldType.FullName!.Contains("ReadOnlyMemory"))
+                    {
+                        try { rom = (ReadOnlyMemory<byte>)f.GetValue(au)!; if (rom.Length > 0) break; } catch { }
+                    }
+                }
+            }
+            if (rom.Length < 5 + 4 + 4 + 8) return;
+            var span = rom.Span;
+            // Skip Annex B start + NAL header (5 bytes)
+            int o = 5;
+            int w = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(o, 4)); o += 4;
+            int h = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(o, 4)); o += 4;
+            long ticks = BinaryPrimitives.ReadInt64LittleEndian(span.Slice(o, 8)); o += 8;
+            var pixelLen = rom.Length - o;
+            var pixels = new byte[pixelLen];
+            span.Slice(o).CopyTo(pixels);
+            var frame = new CameraFrame(CameraPixelFormat.BGRA32, w, h, ticks, false, pixels);
+            _onFrame(frame);
+        }
+        catch { }
+    }
+
+    public void ProcessRtp(byte[] datagram) => _processRtp?.Invoke(datagram);
+    public void ProcessRtcp(byte[] datagram) => _processRtcp?.Invoke(datagram);
+
+    public void Dispose()
+    {
+        try { ( _receiver as IDisposable)?.Dispose(); } catch { }
     }
 }
 

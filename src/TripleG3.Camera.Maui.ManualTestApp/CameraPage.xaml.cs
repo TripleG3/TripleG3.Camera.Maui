@@ -54,6 +54,17 @@ public partial class CameraPage : ContentPage
             // Ensure initial picker selections are applied (defaults set in XAML)
             if (FeedModePicker.SelectedIndex < 0) FeedModePicker.SelectedIndex = 0; // Live
             if (ViewModePicker.SelectedIndex < 0) ViewModePicker.SelectedIndex = 0; // Local
+            // If RTP option present (index 2 after UDP/TCP), select it and configure loopback defaults
+            if (ProtocolPicker.SelectedIndex < 0 && ProtocolPicker.Items.Count >= 3)
+                ProtocolPicker.SelectedIndex = 2; // RTP
+            if (ProtocolPicker.Items.Count >= 3 && ProtocolPicker.SelectedIndex == 2)
+            {
+                if (string.IsNullOrWhiteSpace(RemoteHostEntry.Text)) RemoteHostEntry.Text = "127.0.0.1";
+                if (string.IsNullOrWhiteSpace(RemotePortEntry.Text)) RemotePortEntry.Text = "50555"; // matches AddRtpVideoStub
+                RemoteView.Protocol = RemoteVideoProtocol.RTP;
+                RemoteView.IpAddress = null; // passive listen for RTP sender stub
+                RemoteView.Port = 50555;
+            }
             FeedStatusLabel.Text = "Live";
             _showBuffered = false;
             ViewModePicker_SelectedIndexChanged(ViewModePicker, EventArgs.Empty);
@@ -171,7 +182,12 @@ public partial class CameraPage : ContentPage
         if (int.TryParse(RemotePortEntry.Text, out var port))
             RemoteView.Port = port;
         if (ProtocolPicker.SelectedIndex >= 0)
-            RemoteView.Protocol = (RemoteVideoProtocol)ProtocolPicker.SelectedIndex; // enum order matches picker items
+        {
+            // Picker order: UDP=0, TCP=1, RTP=2
+            RemoteView.Protocol = (RemoteVideoProtocol)ProtocolPicker.SelectedIndex;
+            if (RemoteView.Protocol == RemoteVideoProtocol.RTP && RemoteView.Port == 0)
+                RemoteView.Port = 50555;
+        }
         // Optional: keep local subscription active so user can still view local feed when switching modes.
         EnsureLocalSubscription();
         DisplayAlert("Remote", $"Configured {RemoteView.Protocol} {RemoteView.IpAddress}:{RemoteView.Port}", "OK");

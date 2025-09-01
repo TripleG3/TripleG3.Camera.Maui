@@ -55,13 +55,18 @@ internal sealed class VideoRtpSenderStub : IVideoRtpSender, IDisposable
     {
         if (_config == null || _sender == null) return;
         var raw = frame.Data;
-        var annexB = ArrayPool<byte>.Shared.Rent(raw.Length + 5);
+        // Layout: AnnexB start(4) + NAL(1) + width(int32) + height(int32) + timestampTicks(int64) + raw pixels
+        var annexB = ArrayPool<byte>.Shared.Rent(raw.Length + 5 + 4 + 4 + 8);
         try
         {
-            annexB[0] = 0; annexB[1] = 0; annexB[2] = 0; annexB[3] = 1; annexB[4] = 0x65; // fake IDR NAL header
-            Buffer.BlockCopy(raw, 0, annexB, 5, raw.Length);
+            int o = 0;
+            annexB[o++] = 0; annexB[o++] = 0; annexB[o++] = 0; annexB[o++] = 1; annexB[o++] = 0x65; // fake IDR NAL header
+            BitConverter.GetBytes(frame.Width).CopyTo(annexB, o); o += 4;
+            BitConverter.GetBytes(frame.Height).CopyTo(annexB, o); o += 4;
+            BitConverter.GetBytes(frame.TimestampTicks).CopyTo(annexB, o); o += 8;
+            Buffer.BlockCopy(raw, 0, annexB, o, raw.Length);
             uint ts = _timestampBase + (uint)((frame.TimestampTicks / TimeSpan.TicksPerMillisecond) * 90);
-            using var au = new EncodedAccessUnit(new ReadOnlyMemory<byte>(annexB, 0, raw.Length + 5), true, ts, frame.TimestampTicks);
+            using var au = new EncodedAccessUnit(new ReadOnlyMemory<byte>(annexB, 0, raw.Length + 5 + 4 + 4 + 8), true, ts, frame.TimestampTicks);
             _sender.Send(au);
         }
         catch { }

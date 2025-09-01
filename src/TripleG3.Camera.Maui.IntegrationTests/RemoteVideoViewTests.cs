@@ -80,6 +80,34 @@ public class RemoteVideoViewTests
         Assert.True(rf.Data.SequenceEqual(frame.Data));
     }
 
+    [Fact]
+    public async Task RemoteVideoView_RtpReceivesSyntheticFrame()
+    {
+        RemoteVideoView.DisableDispatcherForTests = true;
+        var width = 4;
+        var height = 4;
+        var pixelData = Enumerable.Range(0, width * height * 4).Select(i => (byte)(i & 0xFF)).ToArray();
+        var frame = new CameraFrame(CameraPixelFormat.BGRA32, width, height, DateTime.UtcNow.Ticks, false, pixelData);
+        int port = GetFreePort();
+        var view = new RemoteVideoView { Port = port, Protocol = RemoteVideoProtocol.RTP };
+        var tcs = new TaskCompletionSource<CameraFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
+        view.HandlerImpl = new TestHandler(f => tcs.TrySetResult(f));
+        // Start receiver
+        view.IpAddress = null;
+        await Task.Delay(100);
+        // Send synthetic RTP using sender stub directly (bypassing DI)
+        using var sender = new Streaming.VideoRtpSenderStub("127.0.0.1", port);
+        await sender.InitializeAsync(new Streaming.VideoRtpSessionConfig(width, height, 30, 500_000));
+        sender.SubmitRawFrame(frame);
+        var receivedTask = await Task.WhenAny(tcs.Task, Task.Delay(3000));
+        Assert.True(receivedTask == tcs.Task, "No RTP frame received");
+        var rf = await tcs.Task;
+        Assert.Equal(width, rf.Width);
+        Assert.Equal(height, rf.Height);
+        Assert.Equal(frame.Data.Length, rf.Data.Length);
+        Assert.True(rf.Data.SequenceEqual(frame.Data));
+    }
+
     int GetFreePort()
     {
         var listener = new TcpListener(System.Net.IPAddress.Loopback, 0);
