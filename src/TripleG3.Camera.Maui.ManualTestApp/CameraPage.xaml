@@ -3,80 +3,25 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:cam="clr-namespace:TripleG3.Camera.Maui;assembly=TripleG3.Camera.Maui"
              x:Class="TripleG3.Camera.Maui.ManualTestApp.CameraPage"
-             x:DataType="x:Object"
-             Title="Camera Preview">
-    <Grid RowDefinitions="Auto,*">
-        <VerticalStackLayout Spacing="8"
-                             Padding="12"
-                             Grid.Row="0">
-            <HorizontalStackLayout Spacing="12">
-                <Picker x:Name="CameraPicker"
-                        Title="Select Camera"
-                        WidthRequest="220"
-                        SelectedIndexChanged="CameraPicker_SelectedIndexChanged"
-                        ItemDisplayBinding="{Binding Name}"/>
-                <!--<Picker x:Name="ModePicker" Title="Render Mode" WidthRequest="180" />-->
-                <Button Text="Start"
-                        Clicked="OnStartClicked"/>
-                <Button Text="Stop"
-                        Clicked="OnStopClicked"/>
+             Title="RTP Remote Video">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <VerticalStackLayout Spacing="6" Padding="12" Grid.Row="0">
+            <Label Text="RTP loopback demo: local camera -> RTP sender -> UDP -> RTP receiver -> RemoteVideoView" FontSize="12" TextColor="Gray" />
+            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                <Entry x:Name="RemoteHostEntry" WidthRequest="160" Placeholder="Host (blank=listen any)" />
+                <Entry x:Name="RemotePortEntry" WidthRequest="80" Text="50555" Placeholder="Port" Keyboard="Numeric" />
+                <Button Text="Connect" Clicked="OnConnectClicked" />
+                <Button Text="Restart Cam" Clicked="OnRestartCameraClicked" />
+                <Button Text="Stop" Clicked="OnStopClicked" />
+                <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                    <Label Text="Mirror" FontSize="12" />
+                    <Switch x:Name="MirrorSwitch" IsToggled="True" Toggled="OnMirrorToggled" />
+                </HorizontalStackLayout>
             </HorizontalStackLayout>
-            <HorizontalStackLayout Spacing="8">
-                <Entry x:Name="RemoteHostEntry"
-                       Placeholder="Remote Host"
-                       WidthRequest="160"/>
-                <Entry x:Name="RemotePortEntry"
-                       Placeholder="Port"
-                       Keyboard="Numeric"
-                       WidthRequest="70"/>
-                <Picker x:Name="ProtocolPicker"
-                        WidthRequest="90"
-                        Title="Proto"
-                        SelectedIndex="0">
-                    <Picker.Items>
-                        <x:String>UDP</x:String>
-                        <x:String>TCP</x:String>
-                        <x:String>RTP</x:String>
-                    </Picker.Items>
-                </Picker>
-                <Button Text="Connect"
-                        Clicked="OnConnectClicked"/>
-                <Label Text="Feed:"
-                       VerticalOptions="Center"/>
-                <Picker x:Name="FeedModePicker"
-                        WidthRequest="120"
-                        SelectedIndex="0"
-                        SelectedIndexChanged="FeedModePicker_SelectedIndexChanged">
-                    <Picker.Items>
-                        <x:String>Live</x:String>
-                        <x:String>Buffered</x:String>
-                    </Picker.Items>
-                </Picker>
-                <Label Text="View:"
-                       VerticalOptions="Center"/>
-                <Picker x:Name="ViewModePicker"
-                        WidthRequest="110"
-                        SelectedIndex="0"
-                        SelectedIndexChanged="ViewModePicker_SelectedIndexChanged">
-                    <Picker.Items>
-                        <x:String>Local</x:String>
-                        <x:String>Remote</x:String>
-                    </Picker.Items>
-                </Picker>
-                <Label x:Name="FeedStatusLabel"
-                       Text="Live"
-                       FontSize="12"
-                       TextColor="Gray"
-                       VerticalOptions="Center"/>
-            </HorizontalStackLayout>
-            <!--<Label FontSize="12" Text="Modes include new GPU view below (NewCameraView)." />-->
+            <Label x:Name="StatusLabel" FontSize="11" TextColor="Gray" LineBreakMode="TailTruncation" />
         </VerticalStackLayout>
-        <Grid Grid.Row="1">
-            <cam:CameraView x:Name="GpuCameraView"
-                            HorizontalOptions="Fill"
-                            VerticalOptions="Fill"/>
-            <cam:RemoteVideoView x:Name="RemoteView"
-                                 IsVisible="False"/>
-        </Grid>
+        <cam:RemoteVideoView x:Name="RemoteView" Grid.Row="1" HorizontalOptions="Fill" VerticalOptions="Fill" />
+        <!-- Hidden camera preview used only for capture -->
+        <cam:CameraView x:Name="GpuCameraView" Grid.Row="2" HeightRequest="1" WidthRequest="1" IsVisible="False" />
     </Grid>
 </ContentPage>

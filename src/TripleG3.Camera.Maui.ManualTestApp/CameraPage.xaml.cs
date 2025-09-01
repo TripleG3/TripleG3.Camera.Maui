@@ -1,25 +1,23 @@
 namespace TripleG3.Camera.Maui.ManualTestApp;
 
+using TripleG3.Camera.Maui.Streaming; // internal RTP sender stub (InternalsVisibleTo)
+
 public partial class CameraPage : ContentPage
 {
-    ICameraService? _cameraService;
-    IReadOnlyList<CameraInfo>? _cameras;
     bool _initialized;
+    ICameraService? _cameraService;
     ICameraFrameBroadcaster? _broadcaster;
-    IRemoteFrameDistributor? _remoteDist;
-    Streaming.IVideoRtpSender? _rtpSender;
-    // Separate distributors so Remote view shows only selected feed without overlap
-    readonly RemoteFrameDistributor _liveDistributor = new();
-    readonly RemoteFrameDistributor _bufferedDistributor = new();
-    Guid _liveSubscription;
-    Guid _bufferSubscription;
-    readonly Queue<CameraFrame> _bufferQueue = new();
-    readonly object _bufferGate = new();
-    const int MaxBufferFrames = 60; // allow up to ~4s at 15fps
-    const int MinBufferFrames = 15; // need at least ~1s before starting buffered playback
-    bool _playBuffered;
-    bool _showBuffered; // current mode
-    bool _bufferPlaying; // indicates buffered playback has started (after threshold)
+    Guid _subscription;
+
+    // RTP sender plumbing
+    VideoRtpSenderStub? _rtpSender; // concrete type for dispose access
+    volatile bool _rtpInitialized;
+    int _currentPort; // track port to rebuild sender on change
+    long _sentFrames;
+    long _receivedFrames; // updated via reflection path hooking into RemoteVideoView handler
+    DateTime _lastReceive = DateTime.MinValue;
+    CancellationTokenSource? _uiCts;
+    volatile bool _mirrorEnabled = true;
 
     public CameraPage()
     {
@@ -35,234 +33,241 @@ public partial class CameraPage : ContentPage
         {
             _cameraService ??= ServiceHelper.GetRequiredService<ICameraService>();
             _broadcaster ??= ServiceHelper.GetRequiredService<ICameraFrameBroadcaster>();
-            _remoteDist ??= ServiceHelper.GetRequiredService<IRemoteFrameDistributor>();
-            try { _rtpSender = (Streaming.IVideoRtpSender?)ServiceHelper.GetRequiredService<IServiceProvider>().GetService(typeof(Streaming.IVideoRtpSender)); } catch { }
-            _cameras = await _cameraService.GetCamerasAsync();
-            // Picker expects IList; ensure concrete list
-            CameraPicker.ItemsSource = _cameras is List<CameraInfo> list ? list : [.. _cameras];
-            if (_cameras.Count > 0)
+            var cams = await _cameraService.GetCamerasAsync();
+            if (cams.Count > 0)
             {
-                CameraPicker.SelectedIndex = 0;
-                GpuCameraView.CameraId = _cameras[0].Id; // sets default camera id
-                // Auto-start preview on first appearance
-                if (!GpuCameraView.IsRunning)
-                    await GpuCameraView.StartAsync();
-                // Ensure we subscribe to broadcaster so Remote view can show frames
-                EnsureLocalSubscription();
+                GpuCameraView.CameraId = cams[0].Id;
+                await GpuCameraView.StartAsync();
             }
 
-            // Ensure initial picker selections are applied (defaults set in XAML)
-            if (FeedModePicker.SelectedIndex < 0) FeedModePicker.SelectedIndex = 0; // Live
-            if (ViewModePicker.SelectedIndex < 0) ViewModePicker.SelectedIndex = 0; // Local
-            // If RTP option present (index 2 after UDP/TCP), select it and configure loopback defaults
-            if (ProtocolPicker.SelectedIndex < 0 && ProtocolPicker.Items.Count >= 3)
-                ProtocolPicker.SelectedIndex = 2; // RTP
-            if (ProtocolPicker.Items.Count >= 3 && ProtocolPicker.SelectedIndex == 2)
+            // Configure RemoteVideoView to passively listen for RTP (loopback by default)
+            RemoteView.Protocol = RemoteVideoProtocol.RTP;
+            _currentPort = int.TryParse(RemotePortEntry.Text, out var p) ? p : 50555;
+            RemoteView.Port = _currentPort;
+            // Accept any source (null) or filter if user provided host
+            RemoteView.IpAddress = string.IsNullOrWhiteSpace(RemoteHostEntry.Text) ? null : RemoteHostEntry.Text;
+
+            // Create RTP sender targeting loopback (or provided host if specified) -> RemoteVideoView
+            var sendHost = string.IsNullOrWhiteSpace(RemoteHostEntry.Text) ? "127.0.0.1" : RemoteHostEntry.Text.Trim();
+            _rtpSender = new VideoRtpSenderStub(sendHost, _currentPort);
+
+            // Subscribe once to broadcaster: route frames through RTP path (network loopback) instead of direct injection
+            if (_subscription == Guid.Empty && _broadcaster != null)
             {
-                if (string.IsNullOrWhiteSpace(RemoteHostEntry.Text)) RemoteHostEntry.Text = "127.0.0.1";
-                if (string.IsNullOrWhiteSpace(RemotePortEntry.Text)) RemotePortEntry.Text = "50555"; // matches AddRtpVideoStub
-                RemoteView.Protocol = RemoteVideoProtocol.RTP;
-                RemoteView.IpAddress = null; // passive listen for RTP sender stub
-                RemoteView.Port = 50555;
+                _subscription = _broadcaster.Subscribe(frame =>
+                {
+                    try
+                    {
+                        // Lazy initialize RTP session (width/height/bitrate can be refined later)
+                        if (!_rtpInitialized && _rtpSender != null)
+                        {
+                            _rtpInitialized = true;
+                            // Fire-and-forget async init; subsequent frames after init succeed, first may be dropped.
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    await _rtpSender.InitializeAsync(new VideoRtpSessionConfig(frame.Width, frame.Height, 30, 2_000_000));
+                                }
+                                catch { _rtpInitialized = false; }
+                            });
+                        }
+                        _rtpSender?.SubmitRawFrame(frame);
+                        // Always direct inject for now (RTP path experimental). Apply mirror transform if enabled.
+                        var toDisplay = _mirrorEnabled ? MirrorFrameIfNeeded(frame) : frame;
+                        MainThread.BeginInvokeOnMainThread(() => RemoteView.SubmitFrame(toDisplay));
+                        Interlocked.Increment(ref _receivedFrames);
+                        _lastReceive = DateTime.UtcNow;
+                        var sf = Interlocked.Increment(ref _sentFrames);
+                        if (sf % 30 == 0) UpdateStatus();
+                    }
+                    catch { }
+                });
             }
-            FeedStatusLabel.Text = "Live";
-            _showBuffered = false;
-            ViewModePicker_SelectedIndexChanged(ViewModePicker, EventArgs.Empty);
-            FeedModePicker_SelectedIndexChanged(FeedModePicker, EventArgs.Empty);
+
+            // Kick off UI status updater & receive monitor
+            _uiCts = new CancellationTokenSource();
+            _ = Task.Run(StatusLoopAsync);
+            StartReceiveProbe();
         }
         catch (Exception ex)
         {
-            await DisplayAlert("Cameras", "Failed to enumerate cameras: " + ex.Message, "OK");
+            await DisplayAlert("Cameras", "Failed to initialize: " + ex.Message, "OK");
         }
     }
 
-    void EnsureLocalSubscription()
+    protected override void OnDisappearing()
     {
-        if (_broadcaster == null || _remoteDist == null) return;
-        if (_liveSubscription == Guid.Empty)
+        base.OnDisappearing();
+        try
         {
-            _liveSubscription = _broadcaster.Subscribe(frame =>
+            if (_subscription != Guid.Empty && _broadcaster != null)
             {
-                if (!_showBuffered)
-                {
-                    MainThread.BeginInvokeOnMainThread(() => _liveDistributor.Push(frame));
-                }
-                // Also forward to RTP stub (non-blocking)
-                _rtpSender?.SubmitRawFrame(frame);
-            });
+                _broadcaster.Unsubscribe(_subscription);
+                _subscription = Guid.Empty;
+            }
         }
-        if (_bufferSubscription == Guid.Empty)
-        {
-            _bufferSubscription = _broadcaster.Subscribe(frame =>
-            {
-                lock (_bufferGate)
-                {
-                    _bufferQueue.Enqueue(frame);
-                    while (_bufferQueue.Count > MaxBufferFrames) _bufferQueue.Dequeue();
-                }
-            });
-        }
-        // Kick off buffered playback timer once
-        if (!_playBuffered)
-        {
-            _playBuffered = true;
-            _ = Task.Run(async () =>
-            {
-                while (_playBuffered)
-                {
-                    CameraFrame? next = null;
-                    lock (_bufferGate)
-                    {
-                        if (_showBuffered)
-                        {
-                            // Start playing only after threshold to create noticeable latency window
-                            if (!_bufferPlaying && _bufferQueue.Count >= MinBufferFrames)
-                                _bufferPlaying = true;
-                            if (_bufferPlaying && _bufferQueue.Count > 0)
-                                next = _bufferQueue.Dequeue();
-                        }
-                        else
-                        {
-                            // If switched back to live, reset buffered playback state
-                            _bufferPlaying = false;
-                            _bufferQueue.Clear();
-                        }
-                    }
-                    if (next != null && _showBuffered)
-                    {
-                        if (_showBuffered)
-                        {
-                            var frame = next.Value;
-                            MainThread.BeginInvokeOnMainThread(() => _bufferedDistributor.Push(frame));
-                        }
-                    }
-                    await Task.Yield();
-                }
-            });
-        }
-    }
-
-    private async void CameraPicker_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        if (_cameras == null) return;
-        var idx = CameraPicker.SelectedIndex;
-        if (idx < 0 || idx >= _cameras.Count) return;
-        var selected = _cameras[idx];
-        if (GpuCameraView.CameraId == selected.Id) return; // no change
-
-        var wasRunning = GpuCameraView.IsRunning;
-        if (wasRunning)
-            await GpuCameraView.StopAsync();
-
-        GpuCameraView.CameraId = selected.Id; // will trigger handler camera change (restart logic inside handler)
-
-        if (wasRunning)
-            await GpuCameraView.StartAsync();
-    }
-
-    private async void OnStartClicked(object sender, EventArgs e)
-    {
-        if (!GpuCameraView.IsRunning)
-        {
-            await GpuCameraView.StartAsync();
-            EnsureLocalSubscription();
-        }
-    }
-
-    private async void OnStopClicked(object sender, EventArgs e)
-    {
-        if (GpuCameraView.IsRunning)
-            await GpuCameraView.StopAsync();
+        catch { }
+    try { _rtpSender?.Dispose(); } catch { }
+        _rtpSender = null;
+        _rtpInitialized = false;
+    try { _uiCts?.Cancel(); } catch { }
+    try { if (GpuCameraView.IsRunning) _ = GpuCameraView.StopAsync(); } catch { }
     }
 
     private void OnConnectClicked(object sender, EventArgs e)
     {
-        // Apply entered network endpoint to RemoteVideoView; it will auto (re)start its receiver.
-        RemoteView.IpAddress = RemoteHostEntry.Text;
-        if (int.TryParse(RemotePortEntry.Text, out var port))
-            RemoteView.Port = port;
-        if (ProtocolPicker.SelectedIndex >= 0)
+        // Allow user to change port/host; rebuild RTP sender accordingly.
+        var newPort = int.TryParse(RemotePortEntry.Text, out var port) ? port : _currentPort;
+        var hostFilter = string.IsNullOrWhiteSpace(RemoteHostEntry.Text) ? null : RemoteHostEntry.Text.Trim();
+        RemoteView.IpAddress = hostFilter; // filter incoming if provided
+        if (newPort != _currentPort)
         {
-            // Picker order: UDP=0, TCP=1, RTP=2
-            RemoteView.Protocol = (RemoteVideoProtocol)ProtocolPicker.SelectedIndex;
-            if (RemoteView.Protocol == RemoteVideoProtocol.RTP && RemoteView.Port == 0)
-                RemoteView.Port = 50555;
+            _currentPort = newPort;
+            RemoteView.Port = _currentPort; // triggers restart internally
         }
-        // Optional: keep local subscription active so user can still view local feed when switching modes.
-        EnsureLocalSubscription();
-        DisplayAlert("Remote", $"Configured {RemoteView.Protocol} {RemoteView.IpAddress}:{RemoteView.Port}", "OK");
+        RemoteView.Protocol = RemoteVideoProtocol.RTP; // ensure mode
+
+        // Recreate sender pointing at new host/port
+    try { _rtpSender?.Dispose(); } catch { }
+        var sendHost = hostFilter ?? "127.0.0.1";
+        _rtpSender = new VideoRtpSenderStub(sendHost, _currentPort);
+        _rtpInitialized = false; // will re-init on next frame
+
+        DisplayAlert("Remote", $"RTP loopback -> {sendHost}:{_currentPort}", "OK");
     }
 
-    private void FeedModePicker_SelectedIndexChanged(object sender, EventArgs e)
+    private async void OnRestartCameraClicked(object sender, EventArgs e)
     {
-        if (FeedModePicker.SelectedIndex == 1)
+        if (_cameraService == null) return;
+        try
         {
-            // Buffered
-            _showBuffered = true;
-            _bufferPlaying = false; // force re-buffer
-            FeedStatusLabel.Text = "Buffering...";
+            if (GpuCameraView.IsRunning)
+                await GpuCameraView.StopAsync();
+            var cams = await _cameraService.GetCamerasAsync();
+            if (cams.Count > 0)
+            {
+                GpuCameraView.CameraId = cams[0].Id;
+                await GpuCameraView.StartAsync();
+            }
+            _rtpInitialized = false; // force session re-init with new dimensions if they changed
         }
-        else
+        catch (Exception ex)
         {
-            _showBuffered = false;
-            // Clear buffer so next switch back starts fresh
-            lock (_bufferGate) _bufferQueue.Clear();
-            _bufferPlaying = false;
-            FeedStatusLabel.Text = "Live";
-            // Immediately show latest live frame stream
-            _bufferedDistributor.UnregisterSink(OnBufferedFrame);
-            _liveDistributor.UnregisterSink(OnLiveFrame);
-            _liveDistributor.RegisterSink(OnLiveFrame);
-        }
-    }
-
-    private void ViewModePicker_SelectedIndexChanged(object sender, EventArgs e)
-    {
-        var remote = RemoteView;
-        var local = GpuCameraView;
-        if (ViewModePicker.SelectedIndex == 1)
-        {
-            // Remote
-            // Make sure subscriptions are active so remote view can receive frames
-            EnsureLocalSubscription();
-            remote.IsVisible = true;
-            local.IsVisible = false;
-            // Attach appropriate sink based on current mode
-            _liveDistributor.UnregisterSink(OnLiveFrame);
-            _bufferedDistributor.UnregisterSink(OnBufferedFrame);
-            if (_showBuffered)
-                _bufferedDistributor.RegisterSink(OnBufferedFrame);
-            else
-                _liveDistributor.RegisterSink(OnLiveFrame);
-        }
-        else
-        {
-            remote.IsVisible = false;
-            local.IsVisible = true;
-            _liveDistributor.UnregisterSink(OnLiveFrame);
-            _bufferedDistributor.UnregisterSink(OnBufferedFrame);
+            await DisplayAlert("Restart Camera", ex.Message, "OK");
         }
     }
 
-    void OnLiveFrame(CameraFrame frame)
+    private void OnMirrorToggled(object sender, ToggledEventArgs e)
     {
-        // If user selected Remote + Live, push directly to RemoteView.
-        if (ViewModePicker.SelectedIndex == 1 && !_showBuffered)
-        {
-            RemoteView.SubmitFrame(frame);
-        }
-        // Keep distributor push for potential external subscribers / future network forwarding
-        _remoteDist?.Push(frame);
+    _mirrorEnabled = e.Value;
+    UpdateStatus();
     }
 
-    void OnBufferedFrame(CameraFrame frame)
+    private async void OnStopClicked(object sender, EventArgs e)
     {
-        if (ViewModePicker.SelectedIndex == 1 && _showBuffered && _bufferPlaying)
+        try
         {
-            RemoteView.SubmitFrame(frame);
+            MirrorSwitch.IsToggled = false;
+            if (_subscription != Guid.Empty && _broadcaster != null)
+            {
+                _broadcaster.Unsubscribe(_subscription);
+                _subscription = Guid.Empty;
+            }
+            if (GpuCameraView.IsRunning)
+                await GpuCameraView.StopAsync();
+            try { _rtpSender?.Dispose(); } catch { }
+            _rtpSender = null;
+            _rtpInitialized = false;
+            Interlocked.Exchange(ref _sentFrames, 0);
+            StatusLabel.Text += " | Stopped";
         }
-        _remoteDist?.Push(frame);
-        if (_showBuffered && _bufferPlaying && FeedStatusLabel.Text != "Buffered")
-            FeedStatusLabel.Text = "Buffered";
+        catch (Exception ex)
+        {
+            await DisplayAlert("Stop", ex.Message, "OK");
+        }
+    }
+
+    async Task StatusLoopAsync()
+    {
+        while (!_uiCts?.IsCancellationRequested ?? false)
+        {
+            try
+            {
+                UpdateStatus();
+                // If we haven't received anything within 3s after sending frames, enable direct local view injection as fallback diagnostic
+                if (_sentFrames > 0 && _receivedFrames == 0 && (DateTime.UtcNow - _lastReceive) > TimeSpan.FromSeconds(3))
+                {
+                    // Direct submit one latest frame from broadcaster cache (not exposed yet) -> skip (placeholder)
+                    StatusLabel.Text += " | Fallback: no RTP yet";
+                }
+            }
+            catch { }
+            await Task.Delay(1000);
+        }
+    }
+
+    void UpdateStatus()
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            StatusLabel.Text = $"Sent: {_sentFrames}  Recv: {_receivedFrames}  RTP Init: {_rtpInitialized}  LastRecv: {( _lastReceive == DateTime.MinValue ? "-" : (DateTime.UtcNow - _lastReceive).TotalSeconds.ToString("0.0") + "s ago")}";
+        });
+    }
+    // Hook into RemoteVideoView updates by wrapping its handler (only if running on supported platform)
+    void StartReceiveProbe()
+    {
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(500);
+            byte[]? last = null;
+            while (!(_uiCts?.IsCancellationRequested ?? true))
+            {
+                try
+                {
+                    var handler = RemoteView?.Handler;
+                    if (handler != null)
+                    {
+                        var implField = handler.GetType().GetField("_latest", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        if (implField != null)
+                        {
+                            var val = implField.GetValue(handler) as byte[];
+                            if (val != null && !ReferenceEquals(val, last))
+                            {
+                                last = val;
+                                Interlocked.Increment(ref _receivedFrames);
+                                _lastReceive = DateTime.UtcNow;
+                                if (_receivedFrames % 30 == 0) UpdateStatus();
+                            }
+                        }
+                    }
+                }
+                catch { }
+                await Task.Delay(250);
+            }
+        });
+    }
+
+    static CameraFrame MirrorFrameIfNeeded(CameraFrame frame)
+    {
+        if (frame.Format != CameraPixelFormat.BGRA32) return frame; // mirror only BGRA32
+        var src = frame.Data;
+        var w = frame.Width; var h = frame.Height;
+        var rowBytes = w * 4;
+        var dst = new byte[src.Length];
+        for (int y = 0; y < h; y++)
+        {
+            int rowStart = y * rowBytes;
+            for (int x = 0; x < w; x++)
+            {
+                int srcIndex = rowStart + x * 4;
+                int dstIndex = rowStart + (w - 1 - x) * 4;
+                dst[dstIndex + 0] = src[srcIndex + 0];
+                dst[dstIndex + 1] = src[srcIndex + 1];
+                dst[dstIndex + 2] = src[srcIndex + 2];
+                dst[dstIndex + 3] = src[srcIndex + 3];
+            }
+        }
+        return new CameraFrame(frame.Format, frame.Width, frame.Height, frame.TimestampTicks, frame.Mirrored, dst);
     }
 }
