@@ -162,9 +162,12 @@ public sealed class RemoteVideoView : View, IDisposable
                 using var udp = new UdpClient(Port);
                 var filterIp = string.IsNullOrWhiteSpace(IpAddress) ? null : IPAddress.Parse(IpAddress!);
                 using var rtp = new RtpReceiverAdapter(frame => SubmitFrame(frame));
+                // Small readiness marker
+                RemoteVideoViewDiagnostics.LastRtpFrameTicks = -1;
                 while (!ct.IsCancellationRequested)
                 {
                     var result = await udp.ReceiveAsync(ct).ConfigureAwait(false);
+                    RemoteVideoViewDiagnostics.RtpPacketsReceived++;
                     if (filterIp != null && !result.RemoteEndPoint.Address.Equals(filterIp)) continue;
                     // Classify RTP vs RTCP (basic heuristic: RTCP PT 200-204). We'll feed both.
                     if (result.Buffer.Length >= 2 && (result.Buffer[0] >> 6) == 2)
@@ -280,109 +283,59 @@ public sealed class RemoteVideoView : View, IDisposable
 
 internal sealed class RtpReceiverAdapter : IDisposable
 {
-    readonly object? _receiver;
-    readonly Action<byte[]>? _processRtp;
-    readonly Action<byte[]>? _processRtcp;
-    readonly Action<CameraFrame> _onFrame;
+    private readonly TripleG3.P2P.Video.RtpVideoReceiver? _receiver;
+    private readonly Action<CameraFrame> _onFrame;
 
     public RtpReceiverAdapter(Action<CameraFrame> onFrame)
     {
         _onFrame = onFrame;
         try
         {
-            var asmName = "TripleG3.P2P"; // assembly name hosting video classes
-            var type = Type.GetType("TripleG3.P2P.Video.RtpVideoReceiver, " + asmName, throwOnError: false);
-            var cipherType = Type.GetType("TripleG3.P2P.Video.NoOpCipher, " + asmName, throwOnError: false);
-            var auType = Type.GetType("TripleG3.P2P.Video.EncodedAccessUnit, " + asmName, throwOnError: false);
-            if (type != null && cipherType != null && auType != null)
+            _receiver = new TripleG3.P2P.Video.RtpVideoReceiver(new TripleG3.P2P.Video.NoOpCipher());
+            _receiver.AccessUnitReceived += au =>
             {
-                var ctors = type.GetConstructors();
-                foreach (var c in ctors)
+                try
                 {
-                    var ps = c.GetParameters();
-                    try
-                    {
-                        if (ps.Length == 2 && ps[1].ParameterType.Name.Contains("Action"))
-                        {
-                            var cipher = Activator.CreateInstance(cipherType);
-                            var del = BuildAUCallback(auType);
-                            _receiver = c.Invoke(new object?[] { cipher!, del });
-                            break;
-                        }
-                        else if (ps.Length == 3 && ps[2].ParameterType.Name.Contains("Action"))
-                        {
-                            var cipher = Activator.CreateInstance(cipherType);
-                            var del = BuildAUCallback(auType);
-                            _receiver = c.Invoke(new object?[] { (uint)Random.Shared.Next(), cipher!, del });
-                            break;
-                        }
-                    }
-                    catch { }
+                    var memProp = au.GetType().GetProperty("Data") ?? au.GetType().GetProperty("Payload");
+                    if (memProp == null) return;
+                    var rom = (ReadOnlyMemory<byte>)memProp.GetValue(au)!;
+                    if (rom.Length < 5 + 4 + 4 + 8) return;
+                    var span = rom.Span;
+                    int o = 5;
+                    int w = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(o, 4)); o += 4;
+                    int h = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(o, 4)); o += 4;
+                    long ticks = BinaryPrimitives.ReadInt64LittleEndian(span.Slice(o, 8)); o += 8;
+                    var pixelLen = rom.Length - o;
+                    var pixels = new byte[pixelLen];
+                    span.Slice(o).CopyTo(pixels);
+                    var frame = new CameraFrame(CameraPixelFormat.BGRA32, w, h, ticks, false, pixels);
+                    _onFrame(frame);
+                    RemoteVideoViewDiagnostics.LastRtpFrameTicks = ticks;
                 }
-                if (_receiver != null)
-                {
-                    var mRtp = type.GetMethod("ProcessRtp");
-                    var mRtcp = type.GetMethod("ProcessRtcp");
-                    if (mRtp != null)
-                        _processRtp = buf => { try { mRtp.Invoke(_receiver, new object?[] { (ReadOnlyMemory<byte>)buf }); } catch { } };
-                    if (mRtcp != null)
-                        _processRtcp = buf => { try { mRtcp.Invoke(_receiver, new object?[] { (ReadOnlyMemory<byte>)buf }); } catch { } };
-                }
-            }
+                catch { }
+            };
         }
         catch { }
     }
 
-    Delegate BuildAUCallback(Type auType)
+    public void ProcessRtp(byte[] datagram)
     {
-        return Delegate.CreateDelegate(typeof(Action<>).MakeGenericType(auType), this, nameof(OnAccessUnitReflection));
+        try { _receiver?.ProcessRtp(datagram); } catch { }
     }
-
-    public void OnAccessUnitReflection(object au)
+    public void ProcessRtcp(byte[] datagram)
     {
-        try
-        {
-            var auType = au.GetType();
-            ReadOnlyMemory<byte> rom = default;
-            foreach (var p in auType.GetProperties())
-            {
-                if (p.PropertyType == typeof(ReadOnlyMemory<byte>) || p.PropertyType.FullName!.Contains("ReadOnlyMemory"))
-                {
-                    try { rom = (ReadOnlyMemory<byte>)p.GetValue(au)!; if (rom.Length > 0) break; } catch { }
-                }
-            }
-            if (rom.Length == 0)
-            {
-                foreach (var f in auType.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
-                {
-                    if (f.FieldType.FullName!.Contains("ReadOnlyMemory"))
-                    {
-                        try { rom = (ReadOnlyMemory<byte>)f.GetValue(au)!; if (rom.Length > 0) break; } catch { }
-                    }
-                }
-            }
-            if (rom.Length < 5 + 4 + 4 + 8) return;
-            var span = rom.Span;
-            int o = 5;
-            int w = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(o, 4)); o += 4;
-            int h = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(o, 4)); o += 4;
-            long ticks = BinaryPrimitives.ReadInt64LittleEndian(span.Slice(o, 8)); o += 8;
-            var pixelLen = rom.Length - o;
-            var pixels = new byte[pixelLen];
-            span.Slice(o).CopyTo(pixels);
-            var frame = new CameraFrame(CameraPixelFormat.BGRA32, w, h, ticks, false, pixels);
-            _onFrame(frame);
-        }
-        catch { }
+        try { _receiver?.ProcessRtcp(datagram); } catch { }
     }
-
-    public void ProcessRtp(byte[] datagram) => _processRtp?.Invoke(datagram);
-    public void ProcessRtcp(byte[] datagram) => _processRtcp?.Invoke(datagram);
-
     public void Dispose()
     {
-        try { (_receiver as IDisposable)?.Dispose(); } catch { }
+        try { _receiver?.Dispose(); } catch { }
     }
+}
+
+public static class RemoteVideoViewDiagnostics
+{
+    public static long LastRtpFrameTicks { get; set; }
+    public static int RtpPacketsReceived { get; set; }
 }
 
 public interface IRemoteFrameDistributor

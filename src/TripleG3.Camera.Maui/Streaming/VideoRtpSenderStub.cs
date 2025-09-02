@@ -54,6 +54,11 @@ internal sealed class VideoRtpSenderStub : IVideoRtpSender, IDisposable
     public void SubmitRawFrame(CameraFrame frame)
     {
         if (_config == null || _sender == null) return;
+        // slight initial delay heuristic if timestamp base not yet established
+        if (_timestampBase == 0)
+        {
+            _timestampBase = (uint)Environment.TickCount;
+        }
         var raw = frame.Data;
         // Layout: AnnexB start(4) + NAL(1) + width(int32) + height(int32) + timestampTicks(int64) + raw pixels
         var annexB = ArrayPool<byte>.Shared.Rent(raw.Length + 5 + 4 + 4 + 8);
@@ -65,7 +70,7 @@ internal sealed class VideoRtpSenderStub : IVideoRtpSender, IDisposable
             BitConverter.GetBytes(frame.Height).CopyTo(annexB, o); o += 4;
             BitConverter.GetBytes(frame.TimestampTicks).CopyTo(annexB, o); o += 8;
             Buffer.BlockCopy(raw, 0, annexB, o, raw.Length);
-            uint ts = _timestampBase + (uint)((frame.TimestampTicks / TimeSpan.TicksPerMillisecond) * 90);
+            uint ts = _timestampBase + (uint)(((frame.TimestampTicks) / TimeSpan.TicksPerMillisecond) * 90);
             using var au = new EncodedAccessUnit(new ReadOnlyMemory<byte>(annexB, 0, raw.Length + 5 + 4 + 4 + 8), true, ts, frame.TimestampTicks);
             _sender.Send(au);
         }
