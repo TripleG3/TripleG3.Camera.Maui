@@ -152,7 +152,7 @@ public sealed class RemoteVideoView : View, IDisposable
                 var filterIp = string.IsNullOrWhiteSpace(IpAddress) ? null : IPAddress.Parse(IpAddress!);
                 while (!ct.IsCancellationRequested)
                 {
-                    var result = await udp.ReceiveAsync(ct).ConfigureAwait(false);
+                    var result = await udp.ReceiveAsync(ct);
                     if (filterIp != null && !result.RemoteEndPoint.Address.Equals(filterIp)) continue;
                     ProcessBuffer(result.Buffer);
                 }
@@ -166,7 +166,7 @@ public sealed class RemoteVideoView : View, IDisposable
                 RemoteVideoViewDiagnostics.LastRtpFrameTicks = -1;
                 while (!ct.IsCancellationRequested)
                 {
-                    var result = await udp.ReceiveAsync(ct).ConfigureAwait(false);
+                    var result = await udp.ReceiveAsync(ct);
                     RemoteVideoViewDiagnostics.RtpPacketsReceived++;
                     if (filterIp != null && !result.RemoteEndPoint.Address.Equals(filterIp)) continue;
                     // Classify RTP vs RTCP (basic heuristic: RTCP PT 200-204). We'll feed both.
@@ -184,7 +184,7 @@ public sealed class RemoteVideoView : View, IDisposable
             {
                 if (string.IsNullOrWhiteSpace(IpAddress)) return; // need remote host for TCP
                 using var client = new TcpClient();
-                await client.ConnectAsync(IpAddress!, Port, ct).ConfigureAwait(false);
+                await client.ConnectAsync(IpAddress!, Port, ct);
                 using var stream = client.GetStream();
                 var header = new byte[1 + 4 + 4 + 8 + 1 + 4];
                 while (!ct.IsCancellationRequested)
@@ -214,7 +214,7 @@ public sealed class RemoteVideoView : View, IDisposable
         int read = 0;
         while (read < buffer.Length)
         {
-            int r = await stream.ReadAsync(buffer.AsMemory(read), ct).ConfigureAwait(false);
+            int r = await stream.ReadAsync(buffer.AsMemory(read), ct);
             if (r == 0) return false;
             read += r;
         }

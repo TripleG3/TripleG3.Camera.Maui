@@ -181,7 +181,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
             {
                 try
                 {
-                    using var sb = await SoftwareBitmap.CreateCopyFromSurfaceAsync(surface, BitmapAlphaMode.Premultiplied).AsTask().ConfigureAwait(false);
+                    using var sb = await SoftwareBitmap.CreateCopyFromSurfaceAsync(surface, BitmapAlphaMode.Premultiplied).AsTask();
                     BroadcastSoftwareBitmap(sb);
                 }
                 catch { }
@@ -202,7 +202,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
                     sb = await SoftwareBitmap
                         .CreateCopyFromSurfaceAsync(vmf.Direct3DSurface, BitmapAlphaMode.Ignore)
                         .AsTask()
-                        .ConfigureAwait(false);
+                        ;
                 }
 
                 if (sb == null) return;
