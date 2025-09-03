@@ -27,6 +27,8 @@
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<ApplicationIcon>favicon.ico</ApplicationIcon>
+		<PackageIcon>icon.png</PackageIcon>
 
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
@@ -43,11 +45,16 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-		<PackageReference Include="TripleG3.P2P" Version="1.1.15" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\TripleG3.P2P\src\TripleG3.P2P\TripleG3.P2P.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<None Include="..\\..\\README.md" Pack="true" PackagePath="/" />
+		<None Include="..\\..\\LICENSE" Pack="true" PackagePath="/" />
+		<None Include="icon.png" Pack="true" Visible="false" PackagePath="" />
 	</ItemGroup>
 
 	<ItemGroup>

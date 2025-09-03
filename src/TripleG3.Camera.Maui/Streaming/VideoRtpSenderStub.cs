@@ -1,7 +1,5 @@
 using System.Buffers;
 using System.Net.Sockets;
-using System.Net;
-using System.Threading;
 using TripleG3.P2P.Video;
 
 namespace TripleG3.Camera.Maui.Streaming;
@@ -10,21 +8,13 @@ namespace TripleG3.Camera.Maui.Streaming;
 /// Direct adapter over TripleG3.P2P.Video RtpVideoSender.
 /// Still synthesizes a fake IDR NAL from raw frame bytes until real encoding integrated.
 /// </summary>
-internal sealed class VideoRtpSenderStub : IVideoRtpSender, IDisposable
+internal sealed class VideoRtpSenderStub(string host, int port) : IVideoRtpSender, IDisposable
 {
-    readonly string _remoteHost;
-    readonly int _remotePort;
     UdpClient? _udp;
     uint _timestampBase;
     VideoRtpSessionConfig? _config;
     RtpVideoSender? _sender;
     Timer? _srTimer;
-
-    public VideoRtpSenderStub(string host, int port)
-    {
-        _remoteHost = host;
-        _remotePort = port;
-    }
 
     public Task InitializeAsync(VideoRtpSessionConfig config, CancellationToken ct = default)
     {
@@ -35,8 +25,8 @@ internal sealed class VideoRtpSenderStub : IVideoRtpSender, IDisposable
             ssrc: (uint)Random.Shared.Next(),
             mtu: 1200,
             cipher: new NoOpCipher(),
-            datagramOut: d => { try { _udp?.Send(d.ToArray(), d.Length, _remoteHost, _remotePort); } catch { } },
-            rtcpOut: d => { try { _udp?.Send(d.ToArray(), d.Length, _remoteHost, _remotePort); } catch { } }
+            datagramOut: d => { try { _udp?.Send(d.ToArray(), d.Length, host, port); } catch { } },
+            rtcpOut: d => { try { _udp?.Send(d.ToArray(), d.Length, host, port); } catch { } }
         );
         _srTimer = new Timer(_ =>
         {
@@ -54,6 +44,11 @@ internal sealed class VideoRtpSenderStub : IVideoRtpSender, IDisposable
     public void SubmitRawFrame(CameraFrame frame)
     {
         if (_config == null || _sender == null) return;
+        // slight initial delay heuristic if timestamp base not yet established
+        if (_timestampBase == 0)
+        {
+            _timestampBase = (uint)Environment.TickCount;
+        }
         var raw = frame.Data;
         // Layout: AnnexB start(4) + NAL(1) + width(int32) + height(int32) + timestampTicks(int64) + raw pixels
         var annexB = ArrayPool<byte>.Shared.Rent(raw.Length + 5 + 4 + 4 + 8);
@@ -65,7 +60,7 @@ internal sealed class VideoRtpSenderStub : IVideoRtpSender, IDisposable
             BitConverter.GetBytes(frame.Height).CopyTo(annexB, o); o += 4;
             BitConverter.GetBytes(frame.TimestampTicks).CopyTo(annexB, o); o += 8;
             Buffer.BlockCopy(raw, 0, annexB, o, raw.Length);
-            uint ts = _timestampBase + (uint)((frame.TimestampTicks / TimeSpan.TicksPerMillisecond) * 90);
+            uint ts = _timestampBase + (uint)(((frame.TimestampTicks) / TimeSpan.TicksPerMillisecond) * 90);
             using var au = new EncodedAccessUnit(new ReadOnlyMemory<byte>(annexB, 0, raw.Length + 5 + 4 + 4 + 8), true, ts, frame.TimestampTicks);
             _sender.Send(au);
         }

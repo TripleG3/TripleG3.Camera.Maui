@@ -3,14 +3,8 @@ using Android.Content;
 using Android.Graphics;
 using Android.Hardware.Camera2;
 using Android.Views;
-using Android.Runtime;
-using Android.App;
 using Android.OS;
 using Android.Media;
-using System.Threading.Tasks;
-using System.Threading; // Added missing using directive
-using Microsoft.Maui;
-using Microsoft.Maui.Handlers;
 
 namespace TripleG3.Camera.Maui;
 
@@ -183,42 +177,32 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
     }
 
     // Helper inner classes
-    class SimpleTextureListener : Java.Lang.Object, TextureView.ISurfaceTextureListener
+    class SimpleTextureListener(AndroidCameraViewHandler owner) : Java.Lang.Object, TextureView.ISurfaceTextureListener
     {
-        readonly AndroidCameraViewHandler _owner;
-        public SimpleTextureListener(AndroidCameraViewHandler owner) { _owner = owner; }
-        public void OnSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) => _owner.OnTextureAvailable();
+        public void OnSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) => owner.OnTextureAvailable();
         public bool OnSurfaceTextureDestroyed(SurfaceTexture surface) => true;
         public void OnSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) { }
         public void OnSurfaceTextureUpdated(SurfaceTexture surface) { }
     }
 
-    class CameraStateCallback : CameraDevice.StateCallback
+    class CameraStateCallback(AndroidCameraViewHandler owner, Surface surface) : CameraDevice.StateCallback
     {
-        readonly AndroidCameraViewHandler _owner;
-        readonly Surface _surface;
-        public CameraStateCallback(AndroidCameraViewHandler owner, Surface surface) { _owner = owner; _surface = surface; }
-        public override void OnOpened(CameraDevice camera) => _owner.SetDevice(camera, _surface);
+        public override void OnOpened(CameraDevice camera) => owner.SetDevice(camera, surface);
         public override void OnDisconnected(CameraDevice camera) { try { camera.Close(); } catch { } }
         public override void OnError(CameraDevice camera, CameraError error) { try { camera.Close(); } catch { } }
     }
 
-    class CaptureStateCallback : CameraCaptureSession.StateCallback
+    class CaptureStateCallback(AndroidCameraViewHandler owner, Surface surface) : CameraCaptureSession.StateCallback
     {
-        readonly AndroidCameraViewHandler _owner;
-        readonly Surface _surface;
-        public CaptureStateCallback(AndroidCameraViewHandler owner, Surface surface) { _owner = owner; _surface = surface; }
-        public override void OnConfigured(CameraCaptureSession session) => _owner.OnSessionReady(session, _surface);
+        public override void OnConfigured(CameraCaptureSession session) => owner.OnSessionReady(session, surface);
         public override void OnConfigureFailed(CameraCaptureSession session) { }
     }
 
-    class ImageAvailableListener : Java.Lang.Object, ImageReader.IOnImageAvailableListener
+    class ImageAvailableListener(AndroidCameraViewHandler owner) : Java.Lang.Object, ImageReader.IOnImageAvailableListener
     {
-        readonly AndroidCameraViewHandler _owner;
-        public ImageAvailableListener(AndroidCameraViewHandler owner) { _owner = owner; }
         public void OnImageAvailable(ImageReader? reader)
         {
-            if (!_owner._started) return;
+            if (!owner._started) return;
             if (reader == null) return;
             Android.Media.Image? img = null;
             try
@@ -244,7 +228,7 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
                 // U and V (stride-aware copy)
                 CopyPlane(uPlane, uvW, uvH, data, ySize, 1);
                 CopyPlane(vPlane, uvW, uvH, data, ySize + uSize, 1);
-                _owner.BroadcastAndroidYuv(data, w, h);
+                owner.BroadcastAndroidYuv(data, w, h);
             }
             catch { }
             finally { try { img?.Close(); } catch { } }

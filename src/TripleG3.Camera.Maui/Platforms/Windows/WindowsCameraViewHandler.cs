@@ -52,7 +52,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
 
     // Fallback (when BGRA8 surface not provided)
     bool _fallbackConversion;
-    byte[] _pixelBuffer = Array.Empty<byte>();
+    byte[] _pixelBuffer = [];
     int _fbWidth;
     int _fbHeight;
 
@@ -181,7 +181,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
             {
                 try
                 {
-                    using var sb = await SoftwareBitmap.CreateCopyFromSurfaceAsync(surface, BitmapAlphaMode.Premultiplied).AsTask().ConfigureAwait(false);
+                    using var sb = await SoftwareBitmap.CreateCopyFromSurfaceAsync(surface, BitmapAlphaMode.Premultiplied).AsTask();
                     BroadcastSoftwareBitmap(sb);
                 }
                 catch { }
@@ -202,7 +202,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
                     sb = await SoftwareBitmap
                         .CreateCopyFromSurfaceAsync(vmf.Direct3DSurface, BitmapAlphaMode.Ignore)
                         .AsTask()
-                        .ConfigureAwait(false);
+                        ;
                 }
 
                 if (sb == null) return;
@@ -379,7 +379,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
 
 partial class WindowsCameraViewHandler
 {
-    static readonly byte[] _scratchHeader = Array.Empty<byte>();
+    static readonly byte[] _scratchHeader = [];
     void BroadcastSoftwareBitmap(SoftwareBitmap sb)
     {
         if (VirtualView?.Handler?.MauiContext == null) return;
