@@ -27,6 +27,8 @@
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<ApplicationIcon>favicon.ico</ApplicationIcon>
+		<PackageIcon>icon.png</PackageIcon>
 
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
@@ -51,6 +53,8 @@
 
 	<ItemGroup>
 		<None Include="..\\..\\README.md" Pack="true" PackagePath="/" />
+		<None Include="..\\..\\LICENSE" Pack="true" PackagePath="/" />
+		<None Include="icon.png" Pack="true" Visible="false" PackagePath="" />
 	</ItemGroup>
 
 	<ItemGroup>
