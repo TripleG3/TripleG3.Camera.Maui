@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TripleG3.Skeye.ViewModels;assembly=TripleG3.Skeye.ViewModels"
+             x:Class="TripleG3.Camera.Maui.ManualTestApp.PromptPage"
+             x:DataType="vm:PromptRequestViewModel"
+             Title="Prompt">
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Label Text="Prompt" FontAttributes="Bold" />
+            <Entry Text="{Binding Prompt}" Placeholder="Describe what you want to see" />
+
+            <Label Text="Location (tap map)" FontAttributes="Bold" />
+            <HorizontalStackLayout Spacing="8">
+                <Label Text="Lat:" />
+                <Label Text="{Binding Latitude}" />
+                <Label Text="Lon:" />
+                <Label Text="{Binding Longitude}" />
+            </HorizontalStackLayout>
+
+            <Label Text="Radius (km)" />
+            <Entry Text="{Binding RadiusKm}" Keyboard="Numeric" />
+
+            <Label Text="TTL (seconds)" />
+            <Entry Text="{Binding TtlSeconds}" Keyboard="Numeric" />
+
+            <Button Text="Create Prompt" Command="{Binding CreatePromptCommand}" />
+
+            <Label Text="Status" FontAttributes="Bold" />
+            <Label Text="{Binding Status, StringFormat='Status: {0}'}" />
+            <Label Text="{Binding BroadcasterCount, StringFormat='Broadcasters: {0}'}" />
+            <Label Text="{Binding ExpiresUtc, StringFormat='Expires UTC: {0:HH:mm:ss}'}" IsVisible="{Binding ExpiresUtc}" />
+            <Label Text="{Binding CreatedPromptId, StringFormat='Id: {0}'}" IsVisible="{Binding CreatedPromptId}" />
+
+            <Label Text="Broadcast" FontAttributes="Bold" />
+            <Button Text="Start Broadcast" Command="{Binding StartBroadcastCommand}" IsVisible="{Binding IsBroadcasting, Converter={StaticResource InverseBoolConverter}}" />
+            <Button Text="Stop Broadcast" Command="{Binding StopBroadcastCommand}" IsVisible="{Binding IsBroadcasting}" />
+            <Label Text="{Binding CurrentBroadcastPrompt, StringFormat='Broadcasting: {0}'}" IsVisible="{Binding IsBroadcasting}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

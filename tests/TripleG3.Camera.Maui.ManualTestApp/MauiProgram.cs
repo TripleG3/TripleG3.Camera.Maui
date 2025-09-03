@@ -1,5 +1,8 @@
 ﻿using TripleG3.Camera.Maui.Streaming;
 using Microsoft.Extensions.Logging;
+using TripleG3.Skeye.ViewModels; // view models only
+using TripleG3.Skeye.Models.Abstractions;
+using TripleG3.Camera.Maui.ManualTestApp.Services;
 
 namespace TripleG3.Camera.Maui.ManualTestApp;
 
@@ -26,12 +29,17 @@ public static class MauiProgram
 #endif
             });
 
-    // Services
-    builder.Services.AddSingleton<ICameraService, CameraService>();
-    builder.Services.AddSingleton<ICameraFrameBroadcaster, CameraFrameBroadcaster>();
-    // Temporary RTP stub registration (loopback localhost:50555 by default). Adjust as needed.
-    builder.Services.AddRtpVideoStub("127.0.0.1", 50555);
-    builder.Services.AddSingleton<IRemoteFrameDistributor, RemoteFrameDistributor>();
+        // Services
+        builder.Services.AddSingleton<ICameraService, CameraService>();
+        builder.Services.AddSingleton<ICameraFrameBroadcaster, CameraFrameBroadcaster>();
+        // Temporary RTP stub registration (loopback localhost:50555 by default). Adjust as needed.
+        builder.Services.AddRtpVideoStub("127.0.0.1", 50555);
+        builder.Services.AddSingleton<IRemoteFrameDistributor, RemoteFrameDistributor>();
+
+    // Simplified Skeye-related dependencies (local test doubles)
+    builder.Services.AddSingleton<IUserContext, LocalUserContext>();
+    builder.Services.AddSingleton<ILocationService, LocalLocationService>();
+    builder.Services.AddSingleton<IBroadcastState, LocalBroadcastState>();
 
 #if DEBUG
 		builder.Logging.AddDebug();

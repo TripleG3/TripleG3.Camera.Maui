@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks>net9.0-android;net9.0-ios;net9.0-maccatalyst</TargetFrameworks>
@@ -35,6 +35,7 @@
 		<AndroidManifestPlaceholders>GOOGLE_MAPS_API_KEY=$(GoogleMapsApiKey)</AndroidManifestPlaceholders>
 	</PropertyGroup>
 
+    <!-- Standard resources (no longer conflicting since Skeye.Maui app reference removed) -->
 	<ItemGroup>
 		<!-- App Icon -->
 		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
@@ -45,11 +46,11 @@
 		<!-- Images -->
 		<MauiImage Include="Resources\Images\*" />
 		<MauiImage Update="Resources\Images\dotnet_bot.png" Resize="True" BaseSize="300,185" />
-		
-		<!-- Custom Fonts -->
+
+		<!-- Fonts -->
 		<MauiFont Include="Resources\Fonts\*" />
 
-		<!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
+		<!-- Raw assets -->
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
 
@@ -64,12 +65,17 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\..\src\TripleG3.Camera.Maui\TripleG3.Camera.Maui.csproj" />
+	  <ProjectReference Include="..\..\..\TripleG3.Skeye.Maui\src\TripleG3.Skeye.Models\TripleG3.Skeye.Models.csproj" />
+	  <ProjectReference Include="..\..\..\TripleG3.Skeye.Maui\src\TripleG3.Skeye.ViewModels\TripleG3.Skeye.ViewModels.csproj" />
 	</ItemGroup>
 
 	<!-- Removed SkiaSharp dependency as it's unused -->
 
 	<ItemGroup>
 	  <MauiXaml Update="CameraPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
+	  <MauiXaml Update="PromptPage.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>
 	</ItemGroup>
