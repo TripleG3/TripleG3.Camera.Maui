@@ -18,7 +18,7 @@ public sealed class CameraService : ICameraService
                 try
                 {
                         var mgr = Android.App.Application.Context.GetSystemService(Android.Content.Context.CameraService) as Android.Hardware.Camera2.CameraManager;
-                        if (mgr == null) return Task.FromResult<IReadOnlyList<CameraInfo>>(Array.Empty<CameraInfo>());
+                        if (mgr == null) return Task.FromResult<IReadOnlyList<CameraInfo>>([]);
                         var ids = mgr.GetCameraIdList();
                         var list = new List<CameraInfo>(ids.Length);
                         foreach (var id in ids)
@@ -42,12 +42,12 @@ public sealed class CameraService : ICameraService
                         }
                         return Task.FromResult<IReadOnlyList<CameraInfo>>(list);
                 }
-                catch { return Task.FromResult<IReadOnlyList<CameraInfo>>(Array.Empty<CameraInfo>()); }
+                catch { return Task.FromResult<IReadOnlyList<CameraInfo>>([]); }
 #elif IOS || MACCATALYST
                 // TODO: Implement iOS/MacCatalyst enumeration using AVCaptureDevice.DevicesWithMediaType.
-                return Task.FromResult<IReadOnlyList<CameraInfo>>(Array.Empty<CameraInfo>());
+                return Task.FromResult<IReadOnlyList<CameraInfo>>([]);
 #else
-                return Task.FromResult<IReadOnlyList<CameraInfo>>(Array.Empty<CameraInfo>());
+                return Task.FromResult<IReadOnlyList<CameraInfo>>([]);
 #endif
         }
 

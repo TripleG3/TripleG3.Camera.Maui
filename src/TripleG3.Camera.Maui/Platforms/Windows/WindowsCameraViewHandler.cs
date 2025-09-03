@@ -52,7 +52,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
 
     // Fallback (when BGRA8 surface not provided)
     bool _fallbackConversion;
-    byte[] _pixelBuffer = Array.Empty<byte>();
+    byte[] _pixelBuffer = [];
     int _fbWidth;
     int _fbHeight;
 
@@ -379,7 +379,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
 
 partial class WindowsCameraViewHandler
 {
-    static readonly byte[] _scratchHeader = Array.Empty<byte>();
+    static readonly byte[] _scratchHeader = [];
     void BroadcastSoftwareBitmap(SoftwareBitmap sb)
     {
         if (VirtualView?.Handler?.MauiContext == null) return;

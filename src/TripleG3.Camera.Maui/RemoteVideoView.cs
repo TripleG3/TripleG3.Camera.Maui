@@ -1,10 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Buffers.Binary;
-using System.Threading;
-using System.Threading.Tasks;
-using System;
-using System.Reflection;
 
 namespace TripleG3.Camera.Maui;
 

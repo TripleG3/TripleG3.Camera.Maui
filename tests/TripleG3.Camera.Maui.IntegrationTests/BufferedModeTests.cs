@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using TripleG3.Camera.Maui;
 using Xunit;
 
 namespace TripleG3.Camera.Maui.IntegrationTests;
@@ -47,11 +45,9 @@ public class BufferedModeTests
         Assert.True(received.SequenceEqual(Enumerable.Range(0, total)), "Frame order incorrect");
     }
 
-    private sealed class TestHandler : IRemoteVideoViewHandler
+    private sealed class TestHandler(Action<CameraFrame> onFrame) : IRemoteVideoViewHandler
     {
-        readonly Action<CameraFrame> _onFrame;
-        public TestHandler(Action<CameraFrame> onFrame) => _onFrame = onFrame;
         public void OnSizeChanged(double w, double h) { }
-        public void UpdateFrame(CameraFrame frame) => _onFrame(frame);
+        public void UpdateFrame(CameraFrame frame) => onFrame(frame);
     }
 }

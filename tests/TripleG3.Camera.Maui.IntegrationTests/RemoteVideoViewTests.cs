@@ -1,6 +1,5 @@
 using System.Net.Sockets;
 using System.Buffers.Binary;
-using TripleG3.Camera.Maui;
 using Xunit;
 
 namespace TripleG3.Camera.Maui.IntegrationTests;
@@ -114,11 +113,9 @@ public class RemoteVideoViewTests
         return port;
     }
 
-    private sealed class TestHandler : IRemoteVideoViewHandler
+    private sealed class TestHandler(Action<CameraFrame> onFrame) : IRemoteVideoViewHandler
     {
-        readonly Action<CameraFrame> _onFrame;
-        public TestHandler(Action<CameraFrame> onFrame) => _onFrame = onFrame;
         public void OnSizeChanged(double w, double h) { }
-        public void UpdateFrame(CameraFrame frame) => _onFrame(frame);
+        public void UpdateFrame(CameraFrame frame) => onFrame(frame);
     }
 }

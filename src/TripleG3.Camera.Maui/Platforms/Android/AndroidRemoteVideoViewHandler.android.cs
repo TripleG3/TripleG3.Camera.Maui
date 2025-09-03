@@ -24,12 +24,11 @@ public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
         VirtualView.HandlerImpl = this;
         return container;
     }
-    class Listener : Java.Lang.Object, TextureView.ISurfaceTextureListener
+    class Listener(AndroidRemoteVideoViewHandler h) : Java.Lang.Object, TextureView.ISurfaceTextureListener
     {
-        readonly AndroidRemoteVideoViewHandler _h; public Listener(AndroidRemoteVideoViewHandler h) { _h = h; }
-        public void OnSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) => _h.Draw();
+        public void OnSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) => h.Draw();
         public bool OnSurfaceTextureDestroyed(SurfaceTexture surface) => true;
-        public void OnSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) => _h.Draw();
+        public void OnSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) => h.Draw();
         public void OnSurfaceTextureUpdated(SurfaceTexture surface) { }
     }
     public void OnSizeChanged(double w, double h) => Draw();

@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 namespace TripleG3.Camera.Maui;
 
 /// <summary>

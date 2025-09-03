@@ -1,7 +1,5 @@
 using System.Buffers;
 using System.Net.Sockets;
-using System.Net;
-using System.Threading;
 using TripleG3.P2P.Video;
 
 namespace TripleG3.Camera.Maui.Streaming;
@@ -10,21 +8,13 @@ namespace TripleG3.Camera.Maui.Streaming;
 /// Direct adapter over TripleG3.P2P.Video RtpVideoSender.
 /// Still synthesizes a fake IDR NAL from raw frame bytes until real encoding integrated.
 /// </summary>
-internal sealed class VideoRtpSenderStub : IVideoRtpSender, IDisposable
+internal sealed class VideoRtpSenderStub(string host, int port) : IVideoRtpSender, IDisposable
 {
-    readonly string _remoteHost;
-    readonly int _remotePort;
     UdpClient? _udp;
     uint _timestampBase;
     VideoRtpSessionConfig? _config;
     RtpVideoSender? _sender;
     Timer? _srTimer;
-
-    public VideoRtpSenderStub(string host, int port)
-    {
-        _remoteHost = host;
-        _remotePort = port;
-    }
 
     public Task InitializeAsync(VideoRtpSessionConfig config, CancellationToken ct = default)
     {
@@ -35,8 +25,8 @@ internal sealed class VideoRtpSenderStub : IVideoRtpSender, IDisposable
             ssrc: (uint)Random.Shared.Next(),
             mtu: 1200,
             cipher: new NoOpCipher(),
-            datagramOut: d => { try { _udp?.Send(d.ToArray(), d.Length, _remoteHost, _remotePort); } catch { } },
-            rtcpOut: d => { try { _udp?.Send(d.ToArray(), d.Length, _remoteHost, _remotePort); } catch { } }
+            datagramOut: d => { try { _udp?.Send(d.ToArray(), d.Length, host, port); } catch { } },
+            rtcpOut: d => { try { _udp?.Send(d.ToArray(), d.Length, host, port); } catch { } }
         );
         _srTimer = new Timer(_ =>
         {
