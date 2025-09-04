@@ -142,37 +142,47 @@ public sealed class RemoteVideoView : View, IDisposable
     {
         try
         {
-            if (Protocol == RemoteVideoProtocol.UDP)
+            if (Protocol == RemoteVideoProtocol.UDP || Protocol == RemoteVideoProtocol.RTP)
             {
-                using var udp = new UdpClient(Port);
-                var filterIp = string.IsNullOrWhiteSpace(IpAddress) ? null : IPAddress.Parse(IpAddress!);
-                while (!ct.IsCancellationRequested)
+                // Retry binding the UDP socket a few times to avoid ephemeral race conditions in tests
+                UdpClient? udp = null;
+                for (int attempt = 0; attempt < 5 && udp == null; attempt++)
                 {
-                    var result = await udp.ReceiveAsync(ct);
-                    if (filterIp != null && !result.RemoteEndPoint.Address.Equals(filterIp)) continue;
-                    ProcessBuffer(result.Buffer);
+                    try { udp = new UdpClient(Port); }
+                    catch (SocketException) { if (attempt == 4) return; await Task.Delay(50, ct); }
                 }
-            }
-            else if (Protocol == RemoteVideoProtocol.RTP)
-            {
-                using var udp = new UdpClient(Port);
-                var filterIp = string.IsNullOrWhiteSpace(IpAddress) ? null : IPAddress.Parse(IpAddress!);
-                using var rtp = new RtpReceiverAdapter(frame => SubmitFrame(frame));
-                // Small readiness marker
-                RemoteVideoViewDiagnostics.LastRtpFrameTicks = -1;
-                while (!ct.IsCancellationRequested)
+                if (udp == null) return;
+                using (udp)
                 {
-                    var result = await udp.ReceiveAsync(ct);
-                    RemoteVideoViewDiagnostics.RtpPacketsReceived++;
-                    if (filterIp != null && !result.RemoteEndPoint.Address.Equals(filterIp)) continue;
-                    // Classify RTP vs RTCP (basic heuristic: RTCP PT 200-204). We'll feed both.
-                    if (result.Buffer.Length >= 2 && (result.Buffer[0] >> 6) == 2)
+                    RemoteVideoViewDiagnostics.ListenersStarted++;
+                    var filterIp = string.IsNullOrWhiteSpace(IpAddress) ? null : IPAddress.Parse(IpAddress!);
+                    if (Protocol == RemoteVideoProtocol.UDP)
                     {
-                        var pt = (byte)(result.Buffer[1] & 0x7F);
-                        if (pt >= 200 && pt <= 204)
-                            rtp.ProcessRtcp(result.Buffer);
-                        else
-                            rtp.ProcessRtp(result.Buffer);
+                        while (!ct.IsCancellationRequested)
+                        {
+                            var result = await udp.ReceiveAsync(ct);
+                            if (filterIp != null && !result.RemoteEndPoint.Address.Equals(filterIp)) continue;
+                            ProcessBuffer(result.Buffer);
+                        }
+                    }
+                    else // RTP
+                    {
+                        using var rtp = new RtpReceiverAdapter(frame => SubmitFrame(frame));
+                        RemoteVideoViewDiagnostics.LastRtpFrameTicks = -1;
+                        while (!ct.IsCancellationRequested)
+                        {
+                            var result = await udp.ReceiveAsync(ct);
+                            RemoteVideoViewDiagnostics.RtpPacketsReceived++;
+                            if (filterIp != null && !result.RemoteEndPoint.Address.Equals(filterIp)) continue;
+                            if (result.Buffer.Length >= 2 && (result.Buffer[0] >> 6) == 2)
+                            {
+                                var pt = (byte)(result.Buffer[1] & 0x7F);
+                                if (pt >= 200 && pt <= 204)
+                                    rtp.ProcessRtcp(result.Buffer);
+                                else
+                                    rtp.ProcessRtp(result.Buffer);
+                            }
+                        }
                     }
                 }
             }
@@ -182,6 +192,7 @@ public sealed class RemoteVideoView : View, IDisposable
                 using var client = new TcpClient();
                 await client.ConnectAsync(IpAddress!, Port, ct);
                 using var stream = client.GetStream();
+                RemoteVideoViewDiagnostics.ListenersStarted++;
                 var header = new byte[1 + 4 + 4 + 8 + 1 + 4];
                 while (!ct.IsCancellationRequested)
                 {
@@ -332,6 +343,7 @@ public static class RemoteVideoViewDiagnostics
 {
     public static long LastRtpFrameTicks { get; set; }
     public static int RtpPacketsReceived { get; set; }
+    public static int ListenersStarted { get; set; }
 }
 
 public interface IRemoteFrameDistributor
