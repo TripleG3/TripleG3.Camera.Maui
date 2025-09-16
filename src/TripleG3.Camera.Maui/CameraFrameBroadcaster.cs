@@ -10,8 +10,8 @@ public interface ICameraFrameBroadcaster : ICameraFrameSink
 
 internal sealed class CameraFrameBroadcaster : ICameraFrameBroadcaster
 {
-    readonly ConcurrentDictionary<Guid, Action<CameraFrame>> _subs = new();
-    long _lastDeliveredTicks;
+    private readonly ConcurrentDictionary<Guid, Action<CameraFrame>> _subs = new();
+    private long _lastDeliveredTicks;
     public Guid Subscribe(Action<CameraFrame> handler)
     {
         var id = Guid.NewGuid();

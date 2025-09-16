@@ -9,10 +9,10 @@ namespace TripleG3.Camera.Maui;
 public sealed class WindowsRemoteVideoViewHandler : ViewHandler<RemoteVideoView, CanvasControl>, IRemoteVideoViewHandler
 {
     public static readonly PropertyMapper<RemoteVideoView, WindowsRemoteVideoViewHandler> Mapper = new(ViewHandler.ViewMapper);
-    byte[]? _latest;
-    int _w, _h;
-    readonly object _gate = new();
-    CanvasControl? _canvas;
+    private byte[]? _latest;
+    private int _w, _h;
+    private readonly object _gate = new();
+    private CanvasControl? _canvas;
     public WindowsRemoteVideoViewHandler() : base(Mapper) { }
     protected override CanvasControl CreatePlatformView()
     {
@@ -22,7 +22,7 @@ public sealed class WindowsRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
         return _canvas;
     }
 
-    void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
+    private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         byte[]? local; int w, h;
         lock (_gate) { local = _latest; w = _w; h = _h; }
@@ -68,7 +68,7 @@ public sealed class WindowsRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
         }
     }
 
-    static void I420ToBGRA(byte[] src, int w, int h, byte[] dst)
+    private static void I420ToBGRA(byte[] src, int w, int h, byte[] dst)
     {
         int ySize = w * h;
         int uSize = ySize / 4;

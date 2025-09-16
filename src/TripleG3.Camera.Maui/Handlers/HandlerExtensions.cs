@@ -1,9 +1,4 @@
-using Microsoft.Maui.Hosting;
-using Microsoft.Maui;
-using Microsoft.Maui.Controls.Hosting;
 using Microsoft.Maui.Handlers;
-using Microsoft.Extensions.DependencyInjection;
-using System.Threading.Tasks;
 #if IOS || MACCATALYST
 using UIKit;
 using CoreFoundation;
@@ -49,7 +44,7 @@ public static class HandlerExtensions
 }
 
 #if IOS || MACCATALYST
-sealed class AppleCameraViewHandler : ViewHandler<CameraView, UIView>, INewCameraViewHandler
+internal sealed class AppleCameraViewHandler : ViewHandler<CameraView, UIView>, INewCameraViewHandler
 {
     public AppleCameraViewHandler() : base(new PropertyMapper<CameraView, AppleCameraViewHandler>(ViewHandler.ViewMapper)) { }
     protected override UIView CreatePlatformView()
@@ -68,10 +63,10 @@ sealed class AppleCameraViewHandler : ViewHandler<CameraView, UIView>, INewCamer
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
-sealed class AppleRemoteVideoViewHandler : ViewHandler<RemoteVideoView, UIView>, IRemoteVideoViewHandler
+internal sealed class AppleRemoteVideoViewHandler : ViewHandler<RemoteVideoView, UIView>, IRemoteVideoViewHandler
 {
-    readonly object _gate = new();
-    byte[]? _latest; int _w; int _h;
+    private readonly object _gate = new();
+    private byte[]? _latest; private int _w; private int _h;
     public AppleRemoteVideoViewHandler() : base(new PropertyMapper<RemoteVideoView, AppleRemoteVideoViewHandler>(ViewHandler.ViewMapper)) { }
     protected override UIView CreatePlatformView()
     {
@@ -101,7 +96,7 @@ sealed class AppleRemoteVideoViewHandler : ViewHandler<RemoteVideoView, UIView>,
         }
     }
 
-    static void I420ToBGRA(byte[] src, int width, int height, byte[] dest)
+    private static void I420ToBGRA(byte[] src, int width, int height, byte[] dest)
     {
         int yPlaneSize = width * height;
         int uvWidth = width / 2;
@@ -138,7 +133,7 @@ sealed class AppleRemoteVideoViewHandler : ViewHandler<RemoteVideoView, UIView>,
         }
     }
 
-    void Redraw()
+    private void Redraw()
     {
         var view = PlatformView; if (view == null) return;
         // For now just flash background when a frame arrives to show activity during development.

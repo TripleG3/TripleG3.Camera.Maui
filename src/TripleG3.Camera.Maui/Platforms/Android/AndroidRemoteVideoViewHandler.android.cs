@@ -9,10 +9,10 @@ namespace TripleG3.Camera.Maui;
 public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView, FrameLayout>, IRemoteVideoViewHandler
 {
     public static readonly PropertyMapper<RemoteVideoView, AndroidRemoteVideoViewHandler> Mapper = new(ViewHandler.ViewMapper);
-    byte[]? _latest;
-    int _w, _h;
-    readonly object _gate = new();
-    TextureView? _texture;
+    private byte[]? _latest;
+    private int _w, _h;
+    private readonly object _gate = new();
+    private TextureView? _texture;
     public AndroidRemoteVideoViewHandler() : base(Mapper) { }
     protected override FrameLayout CreatePlatformView()
     {
@@ -24,7 +24,7 @@ public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
         VirtualView.HandlerImpl = this;
         return container;
     }
-    class Listener(AndroidRemoteVideoViewHandler h) : Java.Lang.Object, TextureView.ISurfaceTextureListener
+    private class Listener(AndroidRemoteVideoViewHandler h) : Java.Lang.Object, TextureView.ISurfaceTextureListener
     {
         public void OnSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) => h.Draw();
         public bool OnSurfaceTextureDestroyed(SurfaceTexture surface) => true;
@@ -46,7 +46,7 @@ public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
         }
         Draw();
     }
-    void Draw()
+    private void Draw()
     {
         var tv = _texture; if (tv == null || !tv.IsAvailable) return;
         byte[]? local; int w, h; lock (_gate) { local = _latest; w = _w; h = _h; }
@@ -90,7 +90,7 @@ public sealed class AndroidRemoteVideoViewHandler : ViewHandler<RemoteVideoView,
             tv.UnlockCanvasAndPost(canvas);
         }
     }
-    static void I420ToBGRA(byte[] src, int w, int h, byte[] dst)
+    private static void I420ToBGRA(byte[] src, int w, int h, byte[] dst)
     {
         int ySize = w * h;
         int uSize = ySize / 4;

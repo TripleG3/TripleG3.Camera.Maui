@@ -7,8 +7,8 @@ namespace TripleG3.Camera.Maui;
 /// Only Windows currently implemented; other platforms return empty list (placeholder).
 /// </summary>
 public sealed class CameraService : ICameraService
-{   
-        readonly ConcurrentDictionary<string, CameraInfo> _cache = new();
+{
+    private readonly ConcurrentDictionary<string, CameraInfo> _cache = new();
 
         public Task<IReadOnlyList<CameraInfo>> GetCamerasAsync()
         {
@@ -52,7 +52,7 @@ public sealed class CameraService : ICameraService
         }
 
 #if WINDOWS
-        async Task<IReadOnlyList<CameraInfo>> GetWindowsCamerasAsync()
+    private async Task<IReadOnlyList<CameraInfo>> GetWindowsCamerasAsync()
         {
                 var devices = await Windows.Devices.Enumeration.DeviceInformation.FindAllAsync(Windows.Devices.Enumeration.DeviceClass.VideoCapture);
                 var list = new List<CameraInfo>(devices.Count);

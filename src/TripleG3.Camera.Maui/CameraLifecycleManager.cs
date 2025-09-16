@@ -4,8 +4,8 @@ namespace TripleG3.Camera.Maui;
 
 internal static class CameraLifecycleManager
 {
-    static readonly ConcurrentDictionary<INewCameraViewHandler, byte> _handlers = new();
-    static int _initialized;
+    private static readonly ConcurrentDictionary<INewCameraViewHandler, byte> _handlers = new();
+    private static int _initialized;
 
     public static void Register(INewCameraViewHandler handler)
     {
@@ -18,7 +18,7 @@ internal static class CameraLifecycleManager
         _handlers.TryRemove(handler, out _);
     }
 
-    static void EnsureAppHook()
+    private static void EnsureAppHook()
     {
         if (Interlocked.Exchange(ref _initialized, 1) == 1) return;
         var app = Application.Current;
@@ -28,7 +28,7 @@ internal static class CameraLifecycleManager
         }
     }
 
-    static async void AppOnHandlerChanging(object? sender, HandlerChangingEventArgs e)
+    private static async void AppOnHandlerChanging(object? sender, HandlerChangingEventArgs e)
     {
         if (e.NewHandler == null) // app is being torn down
         {

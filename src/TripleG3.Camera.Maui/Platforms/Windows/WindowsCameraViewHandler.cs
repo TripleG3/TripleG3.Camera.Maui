@@ -27,34 +27,34 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
 
     public WindowsCameraViewHandler() : base(Mapper) { }
 
-    static void MapCameraId(WindowsCameraViewHandler handler, CameraView view) =>
+    private static void MapCameraId(WindowsCameraViewHandler handler, CameraView view) =>
         handler.VirtualView?.NewCameraViewHandler?.OnCameraIdChanged(view.CameraId);
 
-    static void MapHeight(WindowsCameraViewHandler handler, CameraView view) =>
+    private static void MapHeight(WindowsCameraViewHandler handler, CameraView view) =>
         handler.VirtualView?.NewCameraViewHandler?.OnHeightChanged(view.Height);
 
-    static void MapWidth(WindowsCameraViewHandler handler, CameraView view) =>
+    private static void MapWidth(WindowsCameraViewHandler handler, CameraView view) =>
         handler.VirtualView?.NewCameraViewHandler?.OnWidthChanged(view.Height);
 
-     static void MapIsMirrored(WindowsCameraViewHandler handler, CameraView view) =>
+    private static void MapIsMirrored(WindowsCameraViewHandler handler, CameraView view) =>
          handler.VirtualView?.NewCameraViewHandler?.OnMirrorChanged(view.IsMirrored);
 
-    CanvasControl? _canvas;
-    MediaCapture? _mediaCapture;
-    MediaFrameReader? _reader;
-    IDirect3DSurface? _latestSurface;
-    readonly object _surfaceLock = new();
-    string? _cameraId;
-    bool _started;
-    bool _isMirrored;
-    bool _disposing; // only true during final app disposal; not for normal stop/switch
-    DispatcherQueue? _dispatcherQueue;
+    private CanvasControl? _canvas;
+    private MediaCapture? _mediaCapture;
+    private MediaFrameReader? _reader;
+    private IDirect3DSurface? _latestSurface;
+    private readonly object _surfaceLock = new();
+    private string? _cameraId;
+    private bool _started;
+    private bool _isMirrored;
+    private bool _disposing; // only true during final app disposal; not for normal stop/switch
+    private DispatcherQueue? _dispatcherQueue;
 
     // Fallback (when BGRA8 surface not provided)
-    bool _fallbackConversion;
-    byte[] _pixelBuffer = [];
-    int _fbWidth;
-    int _fbHeight;
+    private bool _fallbackConversion;
+    private byte[] _pixelBuffer = [];
+    private int _fbWidth;
+    private int _fbHeight;
 
     protected override CanvasControl CreatePlatformView()
     {
@@ -99,19 +99,19 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
     InvalidateOnUI();
     }
 
-    async Task RestartAsync()
+    private async Task RestartAsync()
     {
         await StopAsync();
         await StartAsync();
     }
 
-    async Task<string?> PickFirstCameraAsync()
+    private async Task<string?> PickFirstCameraAsync()
     {
         var devices = await DeviceInformation.FindAllAsync(DeviceClass.VideoCapture);
         return devices.FirstOrDefault()?.Id;
     }
 
-    async Task InitializeCaptureAsync()
+    private async Task InitializeCaptureAsync()
     {
         if (_cameraId == null) return;
 
@@ -163,7 +163,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
         await _reader.StartAsync();
     }
 
-    async void Reader_FrameArrived(MediaFrameReader sender, MediaFrameArrivedEventArgs args)
+    private async void Reader_FrameArrived(MediaFrameReader sender, MediaFrameArrivedEventArgs args)
     {
         if (!_started) return;
         using var frame = sender.TryAcquireLatestFrame();
@@ -244,7 +244,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
     InvalidateOnUI();
     }
 
-    void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
+    private void Canvas_Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         try
         {
@@ -281,7 +281,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
         }
     }
 
-    static void DrawScaled(CanvasControl sender, CanvasDrawingSession ds, CanvasBitmap bmp, bool mirrored)
+    private static void DrawScaled(CanvasControl sender, CanvasDrawingSession ds, CanvasBitmap bmp, bool mirrored)
     {
         // Aspect fill (crop), not fit
         var scale = Math.Max(
@@ -306,7 +306,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
         }
     }
 
-    async Task CleanupAsync(bool final)
+    private async Task CleanupAsync(bool final)
     {
         if (final)
             _disposing = true;
@@ -351,7 +351,7 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
         InvalidateOnUI();
      }
 
-    void InvalidateOnUI()
+    private void InvalidateOnUI()
     {
         if (_disposing) return;
         try
@@ -377,10 +377,10 @@ public sealed partial class WindowsCameraViewHandler : ViewHandler<CameraView, C
     }
 }
 
-partial class WindowsCameraViewHandler
+public partial class WindowsCameraViewHandler
 {
-    static readonly byte[] _scratchHeader = [];
-    void BroadcastSoftwareBitmap(SoftwareBitmap sb)
+    private static readonly byte[] _scratchHeader = [];
+    private void BroadcastSoftwareBitmap(SoftwareBitmap sb)
     {
         if (VirtualView?.Handler?.MauiContext == null) return;
         var broadcaster = VirtualView.Handler.MauiContext.Services.GetService(typeof(ICameraFrameBroadcaster)) as ICameraFrameBroadcaster;
@@ -399,7 +399,7 @@ partial class WindowsCameraViewHandler
         catch { }
     }
 
-    void BroadcastPixelBuffer(byte[] buffer, int w, int h)
+    private void BroadcastPixelBuffer(byte[] buffer, int w, int h)
     {
         if (VirtualView?.Handler?.MauiContext == null) return;
         var broadcaster = VirtualView.Handler.MauiContext.Services.GetService(typeof(ICameraFrameBroadcaster)) as ICameraFrameBroadcaster;

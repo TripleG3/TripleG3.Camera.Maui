@@ -64,9 +64,9 @@ public sealed class RemoteVideoView : View, IDisposable
         set => SetValue(MiddlewareProperty, value);
     }
 
-    CancellationTokenSource? _cts;
-    Task? _recvTask;
-    readonly object _lifecycleGate = new();
+    private CancellationTokenSource? _cts;
+    private Task? _recvTask;
+    private readonly object _lifecycleGate = new();
 
     public RemoteVideoView()
     {
@@ -99,12 +99,12 @@ public sealed class RemoteVideoView : View, IDisposable
         catch { }
     }
 
-    static void OnEndpointChanged(BindableObject bindable, object? oldValue, object? newValue)
+    private static void OnEndpointChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
         if (bindable is RemoteVideoView v) v.RestartIfRunning();
     }
 
-    void RestartIfRunning()
+    private void RestartIfRunning()
     {
         lock (_lifecycleGate)
         {
@@ -114,9 +114,9 @@ public sealed class RemoteVideoView : View, IDisposable
         }
     }
 
-    void TryStart() => RestartIfRunning();
+    private void TryStart() => RestartIfRunning();
 
-    void TryStart_Internal()
+    private void TryStart_Internal()
     {
         if (_recvTask != null) return;
         if (Port <= 0) return; // not configured
@@ -131,14 +131,14 @@ public sealed class RemoteVideoView : View, IDisposable
         lock (_lifecycleGate) Stop_Internal();
     }
 
-    void Stop_Internal()
+    private void Stop_Internal()
     {
         try { _cts?.Cancel(); } catch { }
         try { _recvTask?.Wait(250); } catch { }
         _cts?.Dispose(); _cts = null; _recvTask = null;
     }
 
-    async Task ReceiverLoopAsync(CancellationToken ct)
+    private async Task ReceiverLoopAsync(CancellationToken ct)
     {
         try
         {
@@ -216,7 +216,7 @@ public sealed class RemoteVideoView : View, IDisposable
         catch { }
     }
 
-    static async Task<bool> ReadExactAsync(NetworkStream stream, byte[] buffer, CancellationToken ct)
+    private static async Task<bool> ReadExactAsync(NetworkStream stream, byte[] buffer, CancellationToken ct)
     {
         int read = 0;
         while (read < buffer.Length)
@@ -228,7 +228,7 @@ public sealed class RemoteVideoView : View, IDisposable
         return true;
     }
 
-    static byte[] BuildFrameBuffer(CameraPixelFormat format, int w, int h, long ticks, bool mirrored, byte[] pixelData)
+    private static byte[] BuildFrameBuffer(CameraPixelFormat format, int w, int h, long ticks, bool mirrored, byte[] pixelData)
     {
         var buf = new byte[1 + 4 + 4 + 8 + 1 + 4 + pixelData.Length];
         int o = 0;
@@ -242,7 +242,7 @@ public sealed class RemoteVideoView : View, IDisposable
         return buf;
     }
 
-    void ProcessBuffer(byte[] buffer)
+    private void ProcessBuffer(byte[] buffer)
     {
         try
         {
@@ -261,7 +261,7 @@ public sealed class RemoteVideoView : View, IDisposable
         catch { }
     }
 
-    static CameraFrame? DeserializeFrame(byte[] buffer)
+    private static CameraFrame? DeserializeFrame(byte[] buffer)
     {
         try
         {
@@ -355,8 +355,8 @@ public interface IRemoteFrameDistributor
 
 internal sealed class RemoteFrameDistributor : IRemoteFrameDistributor
 {
-    readonly object _gate = new();
-    readonly List<Action<CameraFrame>> _sinks = new();
+    private readonly object _gate = new();
+    private readonly List<Action<CameraFrame>> _sinks = new();
     public void RegisterSink(Action<CameraFrame> sink)
     {
         lock (_gate) _sinks.Add(sink);

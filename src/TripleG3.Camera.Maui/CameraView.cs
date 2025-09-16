@@ -37,10 +37,10 @@ public sealed class CameraView : View, IAsyncDisposable
     internal INewCameraViewHandler? NewCameraViewHandler { get; set; }
     public bool IsRunning => NewCameraViewHandler?.IsRunning == true;
 
-    static void OnCameraIdChanged(BindableObject bindable, object? oldValue, object? newValue) =>
+    private static void OnCameraIdChanged(BindableObject bindable, object? oldValue, object? newValue) =>
         ((CameraView)bindable).NewCameraViewHandler?.OnCameraIdChanged((string?)newValue);
 
-    static void OnIsMirroredChanged(BindableObject bindable, object? oldValue, object? newValue) =>
+    private static void OnIsMirroredChanged(BindableObject bindable, object? oldValue, object? newValue) =>
         ((CameraView)bindable).NewCameraViewHandler?.OnMirrorChanged((bool)(newValue ?? false));
 
     public Task StartAsync()

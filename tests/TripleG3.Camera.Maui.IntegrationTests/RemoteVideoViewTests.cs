@@ -6,7 +6,7 @@ namespace TripleG3.Camera.Maui.IntegrationTests;
 
 public class RemoteVideoViewTests
 {
-    static byte[] SerializeFrame(CameraFrame frame)
+    private static byte[] SerializeFrame(CameraFrame frame)
     {
         var buf = new byte[1 + 4 + 4 + 8 + 1 + 4 + frame.Data.Length];
         int o = 0;
@@ -104,7 +104,7 @@ public class RemoteVideoViewTests
         Assert.True(RemoteVideoViewDiagnostics.RtpPacketsReceived > 0, "No RTP packets received");
     }
 
-    int GetFreePort()
+    private int GetFreePort()
     {
         var listener = new TcpListener(System.Net.IPAddress.Loopback, 0);
         listener.Start();

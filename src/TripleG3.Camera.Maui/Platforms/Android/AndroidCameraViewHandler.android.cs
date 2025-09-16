@@ -10,7 +10,7 @@ namespace TripleG3.Camera.Maui;
 
 public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandler<CameraView, TextureView>, INewCameraViewHandler
 {
-    static IPropertyMapper<CameraView, AndroidCameraViewHandler> Mapper = new PropertyMapper<CameraView, AndroidCameraViewHandler>(Microsoft.Maui.Handlers.ViewHandler.ViewMapper)
+    private static IPropertyMapper<CameraView, AndroidCameraViewHandler> Mapper = new PropertyMapper<CameraView, AndroidCameraViewHandler>(Microsoft.Maui.Handlers.ViewHandler.ViewMapper)
     {
         [nameof(CameraView.CameraId)] = MapCameraId,
         [nameof(CameraView.IsMirrored)] = MapIsMirrored
@@ -18,20 +18,20 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
 
     public AndroidCameraViewHandler() : base(Mapper) { }
 
-    static void MapCameraId(AndroidCameraViewHandler handler, CameraView view) => handler.VirtualView?.NewCameraViewHandler?.OnCameraIdChanged(view.CameraId);
-    static void MapIsMirrored(AndroidCameraViewHandler handler, CameraView view) => handler.VirtualView?.NewCameraViewHandler?.OnMirrorChanged(view.IsMirrored);
+    private static void MapCameraId(AndroidCameraViewHandler handler, CameraView view) => handler.VirtualView?.NewCameraViewHandler?.OnCameraIdChanged(view.CameraId);
+    private static void MapIsMirrored(AndroidCameraViewHandler handler, CameraView view) => handler.VirtualView?.NewCameraViewHandler?.OnMirrorChanged(view.IsMirrored);
 
-    TextureView? _texture;
-    CameraDevice? _device;
-    CameraCaptureSession? _session;
-    CameraManager? _mgr;
-    string? _cameraId;
-    bool _started;
-    bool _isMirrored;
-    bool _requestedStart;
-    ImageReader? _imageReader;
-    HandlerThread? _bgThread;
-    Android.OS.Handler? _bgHandler;
+    private TextureView? _texture;
+    private CameraDevice? _device;
+    private CameraCaptureSession? _session;
+    private CameraManager? _mgr;
+    private string? _cameraId;
+    private bool _started;
+    private bool _isMirrored;
+    private bool _requestedStart;
+    private ImageReader? _imageReader;
+    private HandlerThread? _bgThread;
+    private Android.OS.Handler? _bgHandler;
 
     protected override TextureView CreatePlatformView()
     {
@@ -62,7 +62,7 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
         return StartInternalAsync();
     }
 
-    Task StartInternalAsync()
+    private Task StartInternalAsync()
     {
         if (_started) return Task.CompletedTask;
     if (_mgr == null) _mgr = (CameraManager?)Android.App.Application.Context!.GetSystemService(Context.CameraService);
@@ -112,20 +112,20 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
         return Task.CompletedTask;
     }
 
-    Task RestartAsync()
+    private Task RestartAsync()
     {
         StopAsync();
         StartAsync();
         return Task.CompletedTask;
     }
 
-    void OnTextureAvailable()
+    private void OnTextureAvailable()
     {
         if (_requestedStart)
             _ = StartInternalAsync();
     }
 
-    void SetDevice(CameraDevice device, Surface surface)
+    private void SetDevice(CameraDevice device, Surface surface)
     {
         _device = device;
     try
@@ -140,7 +140,7 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
     catch { }
     }
 
-    void OnSessionReady(CameraCaptureSession session, Surface surface)
+    private void OnSessionReady(CameraCaptureSession session, Surface surface)
     {
         _session = session;
         try
@@ -159,7 +159,7 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
     public void OnWidthChanged(double width) { /* no-op */ }
     public void OnMirrorChanged(bool isMirrored) { _isMirrored = isMirrored; if (_texture != null) _texture.ScaleX = isMirrored ? -1f : 1f; }
 
-    void ApplyAspectFill(int frameW, int frameH)
+    private void ApplyAspectFill(int frameW, int frameH)
     {
         var tv = _texture; if (tv == null) return;
         if (tv.Width == 0 || tv.Height == 0 || frameW == 0 || frameH == 0) return;
@@ -177,7 +177,7 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
     }
 
     // Helper inner classes
-    class SimpleTextureListener(AndroidCameraViewHandler owner) : Java.Lang.Object, TextureView.ISurfaceTextureListener
+    private class SimpleTextureListener(AndroidCameraViewHandler owner) : Java.Lang.Object, TextureView.ISurfaceTextureListener
     {
         public void OnSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) => owner.OnTextureAvailable();
         public bool OnSurfaceTextureDestroyed(SurfaceTexture surface) => true;
@@ -185,20 +185,20 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
         public void OnSurfaceTextureUpdated(SurfaceTexture surface) { }
     }
 
-    class CameraStateCallback(AndroidCameraViewHandler owner, Surface surface) : CameraDevice.StateCallback
+    private class CameraStateCallback(AndroidCameraViewHandler owner, Surface surface) : CameraDevice.StateCallback
     {
         public override void OnOpened(CameraDevice camera) => owner.SetDevice(camera, surface);
         public override void OnDisconnected(CameraDevice camera) { try { camera.Close(); } catch { } }
         public override void OnError(CameraDevice camera, CameraError error) { try { camera.Close(); } catch { } }
     }
 
-    class CaptureStateCallback(AndroidCameraViewHandler owner, Surface surface) : CameraCaptureSession.StateCallback
+    private class CaptureStateCallback(AndroidCameraViewHandler owner, Surface surface) : CameraCaptureSession.StateCallback
     {
         public override void OnConfigured(CameraCaptureSession session) => owner.OnSessionReady(session, surface);
         public override void OnConfigureFailed(CameraCaptureSession session) { }
     }
 
-    class ImageAvailableListener(AndroidCameraViewHandler owner) : Java.Lang.Object, ImageReader.IOnImageAvailableListener
+    private class ImageAvailableListener(AndroidCameraViewHandler owner) : Java.Lang.Object, ImageReader.IOnImageAvailableListener
     {
         public void OnImageAvailable(ImageReader? reader)
         {
@@ -234,7 +234,7 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
             finally { try { img?.Close(); } catch { } }
         }
 
-        static void CopyPlane(Android.Media.Image.Plane plane, int width, int height, byte[] dest, int destOffset, int pixelStrideExpected)
+        private static void CopyPlane(Android.Media.Image.Plane plane, int width, int height, byte[] dest, int destOffset, int pixelStrideExpected)
         {
             var buf = plane.Buffer!; // guaranteed non-null by Android binding
             int rowStride = plane.RowStride;
@@ -260,7 +260,7 @@ public sealed class AndroidCameraViewHandler : Microsoft.Maui.Handlers.ViewHandl
         }
     }
 
-    void BroadcastAndroidYuv(byte[] i420, int w, int h)
+    private void BroadcastAndroidYuv(byte[] i420, int w, int h)
     {
         if (VirtualView?.Handler?.MauiContext == null) return;
         var broadcaster = VirtualView.Handler.MauiContext.Services.GetService(typeof(ICameraFrameBroadcaster)) as ICameraFrameBroadcaster;

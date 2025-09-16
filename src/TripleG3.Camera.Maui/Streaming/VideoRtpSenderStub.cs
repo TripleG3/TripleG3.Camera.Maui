@@ -10,11 +10,11 @@ namespace TripleG3.Camera.Maui.Streaming;
 /// </summary>
 internal sealed class VideoRtpSenderStub(string host, int port) : IVideoRtpSender, IDisposable
 {
-    UdpClient? _udp;
-    uint _timestampBase;
-    VideoRtpSessionConfig? _config;
-    RtpVideoSender? _sender;
-    Timer? _srTimer;
+    private UdpClient? _udp;
+    private uint _timestampBase;
+    private VideoRtpSessionConfig? _config;
+    private RtpVideoSender? _sender;
+    private Timer? _srTimer;
 
     public Task InitializeAsync(VideoRtpSessionConfig config, CancellationToken ct = default)
     {
